@@ -150,59 +150,64 @@
   }
 
   /* ── Show touch controls on touchscreens — pure CSS, no JS needed ── */
-  /* (pointer: coarse) = touchscreen. (hover: none) = no mouse hover.   */
-  /* Both must be true to avoid triggering on stylus-capable laptops.   */
   @media (pointer: coarse), (max-width: 768px) {
-    .touch-pad{
-      display:flex !important;
-    }
     body{
-      padding:0;
-      justify-content:flex-start;
+      /* Full-height flex column: game on top, controls on bottom, no gap */
+      display:flex !important;
+      flex-direction:column !important;
+      align-items:center !important;
+      justify-content:flex-start !important;
+      padding:0 !important;
+      margin:0 !important;
+      width:100vw !important;
+      height:100vh !important;
+      height:100dvh !important; /* dynamic viewport — accounts for Safari address bar */
+      overflow:hidden !important;
+      background:#000 !important;
     }
-    h1, .controls{
-      display:none !important;
-    }
+    h1, .controls, .badge{ display:none !important; }
     .device{
-      margin-top:env(safe-area-inset-top, 12px);
-      padding:8px;
-      border-radius:8px;
-      box-shadow:
-        inset 0 0 0 2px #3a2515,
-        0 4px 14px rgba(0,0,0,.6);
+      /* No extra padding/margin — canvas fills its allocated space exactly */
+      padding:0 !important;
+      margin:env(safe-area-inset-top, 0px) 0 0 0 !important;
+      background:transparent !important;
+      border:none !important;
+      box-shadow:none !important;
+      flex-shrink:0;
     }
     canvas{
-      width:min(96vw, 70vh) !important;
-      height:min(96vw, 70vh) !important;
+      /* Square canvas: side = min of viewport width and available height above controls */
+      /* Controls take ~190px. Safe area top ~44px. Remaining = 100dvh - 234px. */
+      width:min(100vw, calc(100dvh - 190px)) !important;
+      height:min(100vw, calc(100dvh - 190px)) !important;
+      display:block !important;
+    }
+    .touch-pad{
+      display:flex !important;
+      position:static !important;  /* in normal flow, sits flush under canvas */
+      width:100vw;
+      flex-direction:row;
+      justify-content:space-between;
+      align-items:flex-end;
+      padding:8px 16px env(safe-area-inset-bottom, 8px);
+      flex-shrink:0;
+      background:transparent;
+      box-sizing:border-box;
     }
   }
 
-  /* Touch overlay container: positioned at bottom of screen */
-  .touch-pad{
-    position:fixed;
-    left:0; right:0;
-    bottom:env(safe-area-inset-bottom, 8px);
-    padding:0 16px;
-    flex-direction:row;
-    justify-content:space-between;
-    align-items:flex-end;
-    z-index:10;
-    pointer-events:none;  /* container ignores clicks; only buttons inside catch them */
-  }
-  .touch-pad > *{ pointer-events:auto; }
-
-  /* Smaller phones: shrink controls a touch */
-  @media (max-height: 700px){
-    .dpad{ width:140px; height:140px; }
-    .dpad button{ width:46px; height:46px; }
-    .dpad .up    { left:47px; }
-    .dpad .down  { left:47px; }
-    .dpad .left  { top:47px; }
-    .dpad .right { top:47px; }
-    .dpad .center{ top:47px; left:47px; width:46px; height:46px; }
+  /* Smaller phones: shrink controls */
+  @media (pointer: coarse) and (max-height: 700px) {
+    .dpad{ width:130px; height:130px; }
+    .dpad button{ width:42px; height:42px; }
+    .dpad .up    { left:44px; }
+    .dpad .down  { left:44px; }
+    .dpad .left  { top:44px; }
+    .dpad .right { top:44px; }
+    .dpad .center{ top:44px; left:44px; width:42px; height:42px; }
     .actions .btn-a,
-    .actions .btn-b{ width:54px; height:54px; font-size:22px; }
-    .actions .btn-menu{ width:122px; height:38px; font-size:12px; }
+    .actions .btn-b{ width:50px; height:50px; font-size:20px; }
+    .actions .btn-menu{ width:110px; height:34px; font-size:11px; }
   }
 </style>
 </head>
@@ -245,7 +250,7 @@
 /* ════════════════════════════════════════════════════════════════
    DUNGEONFATE v4 — JS PORT WITH PASS 2 VISUAL POLISH
    ════════════════════════════════════════════════════════════════
-   Faithful prt of main.py: all monsters, items, perks, enchants,
+   Faithful port of main.py: all monsters, items, perks, enchants,
    shrines, traps, village, combat math, boss phases. Plus polish:
      · animated player sprite with facing direction (N/S/E/W)
      · tile variation per floor (wall/floor variants, palette shift)
@@ -285,17 +290,18 @@ const CURSE_C=rgb(180,0,180), BOSS_C=rgb(180,20,20), SHRINE_C=rgb(200,180,50);
 const TILE = 8;
 const MAP_W = 20, MAP_H = 20;
 const VIEW_W = SW / TILE | 0;     // 16
-const HUD_H = 16;
-const VIEW_H = (SH - HUD_H) / TILE | 0;  // 14
+const HUD_H = 20;
+const VIEW_H = (SH - HUD_H) / TILE | 0;  // 13 rows
 
 // Tile IDs
-const T_WALL=0, T_FLOOR=1, T_STAIR=2, T_CHEST=3, T_TOWN=4, T_SHRINE=5, T_BOSS_DOOR=6;
+const T_WALL=0, T_FLOOR=1, T_STAIR=2, T_CHEST=3, T_TOWN=4, T_SHRINE=5, T_BOSS_DOOR=6, T_SLOT=7, T_MERCHANT=8;
 // Status IDs
 const ST_NONE=0, ST_POISON=1, ST_FREEZE=2, ST_BLIND=3, ST_CURSE=4;
 // Game states
 const GS_TITLE=0, GS_VILLAGE=1, GS_DUNGEON=2, GS_COMBAT=3, GS_BOSS_COMBAT=4,
       GS_SHOP=5, GS_CHEST=6, GS_GAMEOVER=7, GS_LEVELUP=8,
-      GS_ENCHANT=9, GS_BLDG=10, GS_DIALOG=11, GS_HOME=12, GS_SCROLL_PICKER=13;
+      GS_ENCHANT=9, GS_BLDG=10, GS_DIALOG=11, GS_HOME=12, GS_SCROLL_PICKER=13,
+      GS_QTY_PROMPT=14, GS_SLOT=15, GS_LIBRARY=16, GS_MERCHANT=17, GS_COMBAT_INV=18;
 
 // ── Dialog text ──────────────────────────────────────────────────────
 const BOSS_SEAL_MSGS=[
@@ -318,7 +324,7 @@ const ITEMS = {
  "Elixir":           [25, 60,"heal",   60,PINK,  0],
  "Antidote":         [15, 35,"cure_p", 0, GREEN, 0],
  "Warmth Flask":     [12, 28,"cure_f", 0, ORANGE,0],
- "Holy Water":       [20, 45,"cure_a", 0, WHITE, 0],
+ "Holy Water":       [40,100,"cure_a", 0, WHITE, 0],
  "Recall Scroll":    [30, 75,"recall", 0, CYAN,  0],
  "Curse Scroll":     [5,  15,"uncurse",0, PURPLE,0],
  "Minor Fire Scroll":     [14, 33,"fire_s",  0, ORANGE,0],
@@ -328,31 +334,68 @@ const ITEMS = {
  "Major Lightning Scroll":[90, 0, "lit_s",   1, GOLD,  0],
  "Major Shield Scroll":   [80, 0, "shield_s",1, CYAN,  0],
  "ID Scroll":        [18, 40,"id",     0, YELLOW,0],
- "Iron Sword":       [30, 80,"weapon", 5, GRAY,  5],
- "Steel Sword":      [60,150,"weapon",10, LBLUE, 8],
- "Shadow Blade":     [110, 0,"weapon",17, INDIGO,15],
- "Void Steel":       [150, 0,"weapon",22, PURPLE,20],
- "Dragon Fang":      [200, 0,"weapon",28, DRED,  10],
- "Leather Armor":    [25, 60,"armor",  3, BROWN, 5],
- "Chain Mail":       [55,120,"armor",  6, GRAY,  8],
- "Plate Armor":      [90,180,"armor", 10, LBLUE, 8],
- "Iron Shield":      [20, 45,"armor",  2, GRAY,  5],
- "Dragon Scale":     [180, 0,"armor", 14, DRED,  10],
- "Soul Armor":       [160, 0,"armor", 12, INDIGO,15],
- "Void Ward":        [140, 0,"armor",  9, PURPLE,20],
- "Lapis Lazuli":     [10,  0,"lapis",  0, BLUE,  0],
+ "Iron Sword":       [30, 80,"weapon",  5, GRAY,   5],
+ "Steel Sword":      [60,150,"weapon", 10, LBLUE,  8],
+ "Bone Crusher":     [100, 0,"weapon", 20, rgb(200,180,140), 10],
+ "Shadow Blade":     [110, 0,"weapon", 17, INDIGO, 15],
+ "Void Steel":       [150, 0,"weapon", 22, PURPLE, 20],
+ "Dragon Fang":      [200, 0,"weapon", 28, DRED,   10],
+ "Lich Blade":       [240, 0,"weapon", 33, rgb(120,80,200), 12],
+ "Chaos Edge":       [300, 0,"weapon", 40, rgb(200,40,40),  10],
+ "Leather Armor":    [25, 60,"armor",   3, BROWN,   5],
+ "Chain Mail":       [55,120,"armor",   6, GRAY,    8],
+ "Plate Armor":      [90,180,"armor",  10, LBLUE,   8],
+ "Iron Shield":      [20, 45,"armor",   2, GRAY,    5],
+ "Dragon Scale":     [180, 0,"armor",  14, DRED,   10],
+ "Soul Armor":       [160, 0,"armor",  12, INDIGO, 15],
+ "Void Ward":        [140, 0,"armor",   9, PURPLE, 20],
+ "Colossus Mail":    [190, 0,"armor",  16, rgb(200,185,150), 10],
+ "Void Carapace":    [210, 0,"armor",  18, rgb(80,60,140),  12],
+ "Lich Shroud":      [240, 0,"armor",  20, rgb(80,40,120),  12],
+ "Chaos Plate":      [300, 0,"armor",  24, rgb(160,20,20),  10],
+ // Legendary tier — cycle 2+ boss drops (floor 50+)
+ "Mythril Blade":    [400, 0,"weapon", 50, rgb(140,200,255), 8],
+ "Abyssal Edge":     [500, 0,"weapon", 62, rgb(60,0,100),    8],
+ "Titan Plate":      [400, 0,"armor",  30, rgb(100,180,255), 8],
+ "Void Eternal":     [500, 0,"armor",  38, rgb(40,0,80),     8],
+ "Amaliate":     [10,  0,"lapis",  0, BLUE,  0],
  "Ruby":             [40,  0,"gem",    0, RED,   0],
  "Sapphire":         [50,  0,"gem",    0, BLUE,  0],
  "Emerald":          [45,  0,"gem",    0, GREEN, 0],
  "Gold Bar":         [80,  0,"gem",    0, GOLD,  0],
  "Soul Crystal":     [120, 0,"gem",    0, INDIGO,0],
  "Ancient Relic":    [150, 0,"gem",    0, GOLD,  0],
+ "Void Shard":       [200, 0,"gem",    0, rgb(80,0,160), 0],
+ "Chaos Gem":        [280, 0,"gem",    0, rgb(200,30,30), 0],
+ // Dungeon merchant items (floor 50+)
+ "Elixir of Life":   [300, 0,"heal",   0, rgb(255,180,220), 0],  // full heal + clears all status
+ "Soulrender":       [400, 0,"weapon", 22, rgb(180,0,80), 15],   // +25% of damage dealt as HP per hit
+ "Scroll of Annihilation": [500, 0,"annihilate", 0, rgb(200,50,255), 0], // one-shots enemy or 30% boss HP
  "Old Coin":         [3,   0,"junk",   0, YELLOW,0],
  "Rat Whiskers":     [2,   0,"junk",   0, BROWN, 0],
  "Goblin Ear":       [3,   0,"junk",   0, DGREEN,0],
  "Cracked Skull":    [4,   0,"junk",   0, GRAY,  0],
  "Troll Wart":       [8,   0,"junk",   0, MGRAY, 0],
+ // Named uniques — rare chest drops, bonus vs specific enemy types
+ "Ratcatcher":       [120, 0,"weapon",  8, ORANGE, 5],
+ "Sunblade":         [180, 0,"weapon", 13, YELLOW, 5],
+ "Witchbane":        [200, 0,"weapon", 17, CYAN,   5],
+ "Demonslayer":      [240, 0,"weapon", 22, RED,    5],
+ "Worldender":       [300, 0,"weapon", 28, PURPLE, 5],
+ // Slot machine jackpot weapon — high crit, high curse risk
+ "Lucky Seven":      [200, 0,"weapon", 12, GOLD,  50],
 };
+
+// Named unique bonus-vs table: { name: { bonus, types[] } }
+const UNIQUE_VS = {
+ "Ratcatcher":  { bonus:5,  types:["Rat","Rat King"] },
+ "Sunblade":    { bonus:6,  types:["Skeleton","Zombie","Wraith","Lich","Vampire","Bone Colossus","Lich Lord"] },
+ "Witchbane":   { bonus:6,  types:["Ice Witch","Wraith","Lich","Lich Lord","Dark Elf"] },
+ "Demonslayer": { bonus:8,  types:["Demon","Goblin","Orc"] },
+ "Worldender":  { bonus:10, types:["Dragon","Chaos Dragon","Void Hydra"] },
+};
+// Lucky Seven grants 33% extra crit chance (checked in crit_chance())
+const LUCKY_SEVEN_CRIT_BONUS = 33;
 
 // Scroll behaviour table — keyed by item name.
 // dmg = immediate damage (fire/lit). burn_turns/burn_dmg = burn DoT (fire only).
@@ -367,25 +410,41 @@ const SCROLL_DATA = {
 };
 
 const SHOP_STOCK=["Iron Sword","Steel Sword","Leather Armor","Chain Mail",
- "Plate Armor","Iron Shield","Health Potion","Elixir","Herb","Lapis Lazuli",
+ "Plate Armor","Iron Shield","Health Potion","Elixir","Herb",
  "Antidote","Warmth Flask","Holy Water","Recall Scroll","Curse Scroll",
  "ID Scroll","Minor Fire Scroll","Minor Lightning Scroll","Minor Shield Scroll"];
 
 // (floor_min, floor_max, item, weight)
 const LOOT_TABLE=[
  [1,99,"Old Coin",38],[1,99,"Herb",18],[1,99,"Health Potion",12],
- [1,99,"Lapis Lazuli",16],[1,99,"Ruby",8],[2,99,"Sapphire",6],
- [3,99,"Emerald",5],[2,99,"Iron Sword",4],[3,99,"Steel Sword",2],
- [4,99,"Gold Bar",3],[3,99,"Minor Lightning Scroll",3],[1,99,"Elixir",3],
+ [10,99,"Amaliate",8],
+ // Gems tiered every 10 floors — better gems only at greater depth
+ [1,  9, "Ruby",     10],   // F1-9 only
+ [10,19, "Sapphire",  8],   // F10-19
+ [10,24, "Emerald",   7],   // F10-24
+ [20,34, "Gold Bar",  5],   // F20-34
+ [30,49, "Soul Crystal",3], // F30-49
+ [40,59, "Ancient Relic",2],// F40-59
+ [50,99, "Void Shard", 2],  // F50+
+ [60,99, "Chaos Gem",  1],  // F60+
+ // Normal gear drops
+ [2,99,"Iron Sword",4],[3,99,"Steel Sword",2],
+ [3,99,"Minor Lightning Scroll",3],[1,99,"Elixir",3],
  [1,99,"Rat Whiskers",10],[2,99,"Goblin Ear",8],[3,99,"Cracked Skull",6],
- [4,99,"Troll Wart",5],[5,99,"Ancient Relic",2],[5,99,"Soul Crystal",2],
+ [4,99,"Troll Wart",5],
  [6,99,"Shadow Blade",2],[6,99,"Dragon Scale",2],[7,99,"Void Steel",1],
  [7,99,"Soul Armor",1],[8,99,"Dragon Fang",1],[8,99,"Void Ward",1],
  [1,99,"Antidote",6],[2,99,"Warmth Flask",5],[2,99,"ID Scroll",4],
  [3,99,"Recall Scroll",3],[4,99,"Curse Scroll",3],
- // New scroll drops — minors common, majors rare
+ // Scroll drops
  [2,99,"Minor Fire Scroll",3],[3,99,"Minor Shield Scroll",3],
  [6,99,"Major Fire Scroll",1],[8,99,"Major Lightning Scroll",1],[7,99,"Major Shield Scroll",1],
+ // Named unique weapons — dispersed every ~20 floors
+ [1, 20,"Ratcatcher",1],[21,40,"Sunblade",1],[41,60,"Witchbane",1],
+ [61,80,"Demonslayer",1],[81,99,"Worldender",1],
+ // Other rare drops
+ [14,99,"Dragon Fang",1],
+ [12,99,"Void Carapace",1],[14,99,"Lich Shroud",1],
 ];
 
 function randomLoot(floor){
@@ -418,16 +477,37 @@ const MONSTERS=[
 ];
 
 const BOSSES=[
- ["Rat King",     40, 8, 2, 50, 40,BROWN, 12,"Shadow Blade"],
- ["Bone Colossus",70,12, 4, 90, 70,WHITE, 16,"Dragon Scale"],
- ["Void Hydra",  110,16, 6,140,110,PURPLE,20,"Void Steel"],
- ["Lich Lord",   160,20, 8,200,160,INDIGO,26,"Dragon Fang"],
- ["Chaos Dragon",250,28,12,350,250,DRED,  36,"Soul Crystal"],
+ ["Rat King",     40,  8, 2, 50, 40, BROWN,  12, ["Shadow Blade",  "Dragon Scale"]],
+ ["Bone Colossus",70, 12, 4, 90, 70, WHITE,  16, ["Bone Crusher",  "Colossus Mail"]],
+ ["Void Hydra",  110, 16, 6,140,110, PURPLE, 20, ["Void Steel",    "Void Carapace"]],
+ ["Lich Lord",   160, 20, 8,200,160, INDIGO, 26, ["Lich Blade",    "Lich Shroud"]],
+ ["Chaos Dragon",250, 28,12,350,250, DRED,   36, ["Chaos Edge",    "Chaos Plate"]],
 ];
 
 function getBoss(floor){
-  const idx = Math.min(((floor/5)|0)-1, BOSSES.length-1);
-  return [...BOSSES[idx]];
+  const idx = Math.min(((floor/5)|0)-1, BOSSES.length-1) % BOSSES.length;
+  const b = [...BOSSES[idx]];
+  // Tier scaling: each 5-floor tier adds +15% HP and +10% ATK
+  const tier = ((floor/5)|0) - 1;
+  if(tier > 0){
+    b[1] = (b[1] * (1 + tier * 0.15)) | 0;
+    b[2] = (b[2] * (1 + tier * 0.10)) | 0;
+    b[7] = (b[7] * (1 + tier * 0.10)) | 0;
+  }
+  // Cycle scaling: each full 25-floor cycle beyond floor 25 adds 1.6x multiplier
+  const cycle = Math.floor((floor - 1) / 25);
+  if(cycle > 0){
+    const cm = Math.pow(1.6, cycle);
+    b[1] = (b[1] * cm) | 0;
+    b[2] = (b[2] * cm) | 0;
+    b[7] = (b[7] * cm) | 0;
+    // XP and gold also scale with cycle
+    b[4] = (b[4] * cm) | 0;
+    b[5] = (b[5] * cm) | 0;
+  }
+  // Add cycle indicator to boss name so player knows difficulty
+  if(cycle > 0) b[0] = `${b[0]} C${cycle}`;
+  return b;
 }
 
 function pickMonster(floor){
@@ -469,6 +549,7 @@ const ALL_PERKS=[
  ["vitality",    "Vitality",    "+15 Max HP",     "maxhp",15,1,GREEN],
  ["scavenger",   "Scavenger",   "2x gem gold",    "gold_m",2,1,GOLD],
  ["quick_learn", "Quick Learn", "XP +25%",        "xp_m",125,1,CYAN],
+ ["pack_rat",    "Pack Rat",    "+2 inv slots",   "inv",   2,2,LBROWN],
  ["medic",       "Medic",       "Potions +50%",   "heal_m",150,2,LGREEN],
  ["treasure",    "Treasure",    "Chests +1 item", "chest", 1,2,YELLOW],
  ["cursebane",   "Cursebane",   "Curses fade 2x", "cbane", 1,2,PURPLE],
@@ -480,9 +561,66 @@ const ALL_PERKS=[
  ["paladin",     "Paladin",     "+3 DEF regen",   "pala",  3,4,WHITE],
  ["arcane",      "Arcane",      "+1 magic charge","charge",1, 4,PURPLE],
  ["dungeon_born","Dungeon Born","Immune 1st hit", "immune",1,5,TEAL],
- ["titan",       "Titan",       "+10 ATK +10 DEF","titan",10,6,GOLD],
+ ["titan",       "Titan",       "+7 ATK +7 DEF", "titan",10,6,GOLD],
  ["phoenix",     "Phoenix",     "Revive 5HP 1x",  "rev",   1,7,RED],
+ // Endgame perks — lv20+ only
+ ["juggernaut",  "Juggernaut",  "+1 ATK/kill",   "jugg",  1,20,rgb(200,100,50)],
+ ["deathmark",   "Deathmark",   "First hit crits","dmk",   1,22,rgb(180,30,30)],
+ ["eternal",     "Eternal",     "+2 HP per floor","etern", 2,24,rgb(50,200,200)],
+ ["warlock",     "Warlock",     "Scrolls +25%/inv","wlck", 1,20,rgb(140,50,200)],
+ ["spellweave",  "Spellweave",  "Cures = free",  "spw",   1,22,rgb(100,180,255)],
 ];
+
+// ── Perk tier data ────────────────────────────────────────────────────
+// For each tiered perk: array of {val, lv, desc, ...extras}
+// Utility perks (scavenger, quick_learn, treasure, cursebane, dungeon_born) stay single-rank.
+// val = primary numeric value used by perk_val(). Extra fields used by perk_tier_data().
+const PERK_TIERS = {
+  iron_fist:   [ {val:3,lv:1,desc:"+3 ATK"}, {val:7,lv:6,desc:"+7 ATK"}, {val:12,lv:11,desc:"+12 ATK"}, {val:18,lv:20,desc:"+18 ATK ★"} ],
+  toughness:   [ {val:3,lv:1,desc:"+3 DEF"}, {val:7,lv:6,desc:"+7 DEF"}, {val:12,lv:11,desc:"+12 DEF"}, {val:18,lv:20,desc:"+18 DEF ★"} ],
+  vitality:    [ {val:12,lv:1,desc:"+12 HP"}, {val:25,lv:6,desc:"+25 HP"}, {val:40,lv:11,desc:"+40 HP"}, {val:60,lv:20,desc:"+60 HP ★"} ],
+  medic:       [ {val:140,lv:2,desc:"+40% heals"}, {val:180,lv:7,desc:"+80% heals"}, {val:220,lv:12,desc:"+120% heals"}, {val:300,lv:22,desc:"+200% heals ★"} ],
+  berserker:   [
+    {val:5, lv:3, desc:"+5 ATK <35%HP", threshold:0.35},
+    {val:9, lv:8, desc:"+9 ATK <40%HP", threshold:0.40},
+    {val:14,lv:13,desc:"+14 ATK <45%HP",threshold:0.45},
+    {val:20,lv:22,desc:"+20 ATK <50%HP ★",threshold:0.50},
+  ],
+  ninja:       [ {val:12,lv:3,desc:"12% dodge"}, {val:20,lv:8,desc:"20% dodge"}, {val:28,lv:13,desc:"28% dodge"}, {val:40,lv:22,desc:"40% dodge ★"} ],
+  bloodthirst: [ {val:3,lv:3,desc:"+3 HP/kill"}, {val:6,lv:8,desc:"+6 HP/kill"}, {val:9,lv:13,desc:"+9 HP/kill"}, {val:15,lv:22,desc:"+15 HP/kill ★"} ],
+  pure_soul:   [ {val:35,lv:3,desc:"35% resist"}, {val:55,lv:8,desc:"55% resist"}, {val:100,lv:13,desc:"Full immune"}, {val:100,lv:22,desc:"Immune + Aura ★"} ],
+  warlord:     [
+    {val:5, lv:4, desc:"+5 ATK -2 DEF",    def_mod:-2},
+    {val:9, lv:9, desc:"+9 ATK -1 DEF",    def_mod:-1},
+    {val:14,lv:14,desc:"+14 ATK +0 DEF",   def_mod:0},
+    {val:20,lv:22,desc:"+20 ATK +2 DEF ★", def_mod:2},
+  ],
+  paladin:     [
+    {val:2, lv:4, desc:"+2DEF 8% regen<50%", def:2, chance:0.08,heal:2,cap:0.50},
+    {val:4, lv:9, desc:"+4DEF 12% regen<60%",def:4, chance:0.12,heal:3,cap:0.60},
+    {val:6, lv:14,desc:"+6DEF 15% regen<75%",def:6, chance:0.15,heal:4,cap:0.75},
+    {val:10,lv:22,desc:"+10DEF 20% regen ★", def:10,chance:0.20,heal:6,cap:1.00},
+  ],
+  arcane:      [ {val:1,lv:4,desc:"+1 charge"}, {val:2,lv:9,desc:"+2 charges"}, {val:3,lv:14,desc:"+3 charges"}, {val:5,lv:22,desc:"+5 charges ★"} ],
+  titan:       [ {val:7,lv:6,desc:"+7 ATK+DEF"}, {val:12,lv:11,desc:"+12 ATK+DEF"}, {val:17,lv:16,desc:"+17 ATK+DEF"}, {val:25,lv:24,desc:"+25 ATK+DEF ★"} ],
+  phoenix:     [
+    {val:1,lv:12,desc:"Revive@5HP 1x",  count:1,hp_frac:0.05},
+    {val:1,lv:16,desc:"Revive@15%HP 1x",count:1,hp_frac:0.15},
+    {val:2,lv:20,desc:"Revive@20%HP 2x",count:2,hp_frac:0.20},
+    {val:3,lv:28,desc:"Revive@30%HP 3x ★",count:3,hp_frac:0.30},
+  ],
+  pack_rat:    [
+    {val:2,lv:2, desc:"+2 slots (22 max)"},
+    {val:4,lv:7, desc:"+4 slots (24 max)"},
+    {val:6,lv:12,desc:"+6 slots (26 max)"},
+  ],
+  // Endgame perks — lv20+ only
+  juggernaut:  [ {val:1,lv:20,desc:"+1 ATK/kill (max 10)"}, {val:2,lv:28,desc:"+2 ATK/kill (max 15) ★"} ],
+  deathmark:   [ {val:1,lv:22,desc:"First hit always crits"}, {val:2,lv:30,desc:"First 2 hits crit ★"} ],
+  eternal:     [ {val:2,lv:24,desc:"+2 HP per floor"}, {val:4,lv:32,desc:"+4 HP per floor ★"} ],
+  warlock:     [ {val:1,lv:20,desc:"Scrolls +25% dmg/invoke rank"}, {val:2,lv:28,desc:"Scrolls +50% dmg/invoke rank ★"} ],
+  spellweave:  [ {val:1,lv:22,desc:"Cures never cost charges"}, {val:2,lv:30,desc:"All scrolls free every 3rd ★"} ],
+};
 
 function shuffle(arr){
   for(let i=arr.length-1; i>0; i--){
@@ -493,13 +631,31 @@ function shuffle(arr){
 }
 
 function getPerkChoices(player, count=3){
-  const owned = new Set(player.perks.map(p => p[0]));
-  let avail = ALL_PERKS.filter(pk => !owned.has(pk[0]) && pk[5] <= player.level);
-  if(!avail.length){
-    avail = ALL_PERKS.filter(pk => pk[5] <= player.level);
-    if(!avail.length) avail = [...ALL_PERKS];
+  const choices = [];
+  for(const pk of ALL_PERKS){
+    const id = pk[0];
+    const tiers = PERK_TIERS[id];
+    const has = player.has_perk(id);
+    if(!has){
+      // Can take T1 (or the only rank for utility perks)
+      const min_lv = tiers ? tiers[0].lv : pk[5];
+      if(player.level >= min_lv) choices.push({pk, rank:0, is_upgrade:false});
+    } else if(tiers){
+      // Can we upgrade to next rank?
+      const cur = player.perk_ranks[id] || 0;
+      const nxt = cur + 1;
+      if(nxt < tiers.length && player.level >= tiers[nxt].lv)
+        choices.push({pk, rank:nxt, is_upgrade:true});
+    }
   }
-  return shuffle([...avail]).slice(0, count);
+  // Fallback: if nothing eligible at all, show any unowned perk
+  if(!choices.length){
+    for(const pk of ALL_PERKS){
+      if(!player.has_perk(pk[0])) choices.push({pk, rank:0, is_upgrade:false});
+    }
+  }
+  shuffle(choices);
+  return choices.slice(0, count);
 }
 
 // ── Village buildings ────────────────────────────────────────────────
@@ -508,8 +664,8 @@ const BLDG_DEF = {
  inn:    ["Inn",      0,  LBROWN,"Rest & heal (50G)"],
  enchant:["Ench Tabl",300,PURPLE,"Enchant gear"],
  forge:  ["Forge",    200,RED,   "Upgrade items"],
- library:["Library",  150,LBLUE, "+1 perk choice"],
- temple: ["Temple",   250,GOLD,  "Lift curses"],
+ library:["Library",  150,LBLUE, "+1 perk & junk→XP"],
+ temple: ["Temple",   250,GOLD,  "Curses & Invocation"],
  bank:   ["Bank",     180,GOLD,  "Safe gold storage"],
  home:   ["Home",     0,  CYAN,  "View thy power"],
 };
@@ -523,7 +679,7 @@ class Player {
   reset(){
     this.hp=30; this.max_hp=30;
     this.atk=4; this.defense=1;
-    this.xp=0; this.xp_next=20; this.level=1;
+    this.xp=0; this.xp_next=55; this.level=1;
     this.gold=10; this.floor=1;
     this.inventory=[]; this.enchants={}; this.perks=[];
     this.weapon=null; this.armor=null;
@@ -531,19 +687,39 @@ class Player {
     this.identified=new Set();
     this.buildings={shop:true, inn:true, home:true};
     this.banked=0;
-    this.immune_used=false; this.revive_used=false;
+    this.max_inv=20;  // expandable via Pack Rat perk
+    this.immune_used=false;
+    this.revive_remaining=0;   // replaces revive_used — counts remaining revives this run
     this.perk_choices=3;
+    this.perk_ranks={};        // {perk_id: rank_index 0..2}
+    this.max_inv=20;           // base inventory cap; Pack Rat perk adds +2
+    this.invocation_rank=0;    // 0-3; each rank adds +5 dmg to attack scrolls, +1 turn to shield
     this.x=2; this.y=2;
-    this.status=ST_NONE; this.status_turns=0;
-    this.blinded=false;
+    this.statuses = {};
+    this._curse_penalty = 0;  // tracks actual ATK/DEF penalty applied by curse
     this.atk_mod=0; this.def_mod=0;
     this.facing=2; // 0=N 1=E 2=S 3=W
   }
   has_perk(pid){ return this.perks.some(pk => pk[0]===pid); }
   perk_val(key){
-    // Match by id (pk[0]) OR type (pk[3]) — callers pass either inconsistently
-    for(const pk of this.perks) if(pk[0]===key || pk[3]===key) return pk[4];
+    // Match by perk id (pk[0]) OR type (pk[3]).
+    // For tiered perks, return the current rank's value from PERK_TIERS.
+    for(const pk of this.perks){
+      if(pk[0]===key || pk[3]===key){
+        const id = pk[0];
+        if(PERK_TIERS[id]){
+          const rank = this.perk_ranks[id] || 0;
+          return PERK_TIERS[id][rank].val;
+        }
+        return pk[4];
+      }
+    }
     return 0;
+  }
+  perk_tier_data(id){
+    // Returns the full tier data object for the current rank, or null if not owned / no tiers.
+    if(!this.has_perk(id) || !PERK_TIERS[id]) return null;
+    return PERK_TIERS[id][this.perk_ranks[id] || 0];
   }
   total_atk(){
     let b = this.atk + this.atk_mod;
@@ -554,9 +730,11 @@ class Player {
       }
     }
     for(const pk of this.perks){
-      if(pk[3]==="atk") b += pk[4];
-      if(pk[0]==="warlord") b += pk[4];
-      if(pk[0]==="titan") b += pk[4];
+      const id = pk[0];
+      if(pk[3]==="atk")   b += this.perk_val(id);       // iron_fist
+      if(id==="warlord")  b += (this.perk_tier_data(id)||{val:pk[4]}).val;
+      if(id==="titan")    b += this.perk_val(id);
+      // berserker handled in combat (conditional on HP)
     }
     return Math.max(1, b);
   }
@@ -569,15 +747,18 @@ class Player {
       }
     }
     for(const pk of this.perks){
-      if(pk[3]==="def") b += pk[4];
-      if(pk[0]==="warlord") b -= 3;
-      if(pk[0]==="titan") b += pk[4];
+      const id = pk[0];
+      if(pk[3]==="def")  b += this.perk_val(id);        // toughness
+      if(id==="paladin") b += (this.perk_tier_data(id)||{def:0}).def;  // fix: was never applied before
+      if(id==="warlord") b += (this.perk_tier_data(id)||{def_mod:-3}).def_mod;
+      if(id==="titan")   b += this.perk_val(id);
     }
     return Math.max(0, b);
   }
   resist_status(){
     let c = 0;
-    if(this.has_perk("pure_soul")) c += 50;
+    const ps = this.perk_tier_data("pure_soul");
+    if(ps) c += ps.val;  // uses tiered value (35/55/100)
     if(this.armor){
       for(const e of (this.enchants[this.armor]||[])){
         if(e[3]==="resist") c += 50;
@@ -586,34 +767,115 @@ class Player {
     return Math.floor(Math.random()*100)+1 <= c;
   }
   crit_chance(){
-    // Base 5% crit. Vorpal weapon enchant adds +10. (Lucky Seven and Lucky Strike perk will add more in Pass B.)
+    // Base 5% crit. Vorpal weapon enchant adds +10. Lucky Seven adds +33.
     let c = 5;
     if(this.weapon){
       for(const e of (this.enchants[this.weapon]||[])){
         if(e[0]==="Vorpal") c += 10;
       }
+      if(this.weapon === "Lucky Seven") c += LUCKY_SEVEN_CRIT_BONUS;
     }
     return c;
   }
   roll_crit(){
     return Math.floor(Math.random()*100)+1 <= this.crit_chance();
   }
+  // Called from combat — checks deathmark before random crit
+  roll_crit_combat(game){
+    if(game._deathmark_crits > 0){ game._deathmark_crits--; return true; }
+    return this.roll_crit();
+  }
+  unique_bonus(enemy_name){
+    // Returns bonus ATK if equipped weapon is a named unique vs this enemy type
+    if(!this.weapon) return 0;
+    const uv = UNIQUE_VS[this.weapon];
+    if(!uv) return 0;
+    return uv.types.includes(enemy_name) ? uv.bonus : 0;
+  }
+  // ── Status helpers ─────────────────────────────────────────────
+  // Backward-compat getters. Use a fixed priority order rather than object key order
+  // (which is unreliable for numeric keys).
+  _primary_status(){
+    const order = [ST_CURSE, ST_POISON, ST_BLIND, ST_FREEZE];
+    for(const s of order) if(s in this.statuses) return s;
+    return ST_NONE;
+  }
+  get status(){ return this._primary_status(); }
+  get status_turns(){ const s = this._primary_status(); return s===ST_NONE ? 0 : this.statuses[s]; }
+  get blinded(){ return ST_BLIND in this.statuses; }
+  has_any_status(){ return Object.keys(this.statuses).length > 0; }
+  has_status(stype){ return stype in this.statuses; }
+  active_statuses(){ return Object.keys(this.statuses).map(Number); }
+
   apply_status(stype, turns=5){
     if(this.resist_status()) return false;
-    this.status = stype; this.status_turns = turns;
-    if(stype===ST_BLIND) this.blinded = true;
+    if(stype === ST_CURSE){
+      if(this.has_status(ST_CURSE)){
+        if(turns !== -1) this.statuses[ST_CURSE] = Math.max(this.statuses[ST_CURSE]==-1?999:this.statuses[ST_CURSE], turns);
+        return true;
+      }
+      this.atk_mod -= 2; this.def_mod -= 2;
+      this._curse_penalty = 2;  // track how much was applied for proper reversal
+    }
+    this.statuses[stype] = turns;
     return true;
   }
-  tick_status(){
-    if(this.status===ST_NONE) return 0;
-    if(this.has_perk("cursebane")) this.status_turns = Math.max(0, this.status_turns-2);
-    else this.status_turns--;
-    let dmg = 0;
-    if(this.status===ST_POISON && this.status_turns>0){
-      dmg = 2; this.hp = Math.max(1, this.hp-dmg);
+  _remove_curse_penalty(){
+    // Reverse exactly the penalty we applied. _curse_penalty must be set when curse was applied.
+    const pen = this._curse_penalty || 0;
+    this.atk_mod += pen; this.def_mod += pen;
+    this._curse_penalty = 0;
+  }
+  clear_status(stype=null){
+    if(stype === null){
+      // Clear all statuses
+      if(ST_CURSE in this.statuses) this._remove_curse_penalty();
+      this.statuses = {};
+    } else {
+      if(stype === ST_CURSE && this.has_status(ST_CURSE)) this._remove_curse_penalty();
+      delete this.statuses[stype];
     }
-    if(this.status_turns<=0){ this.status = ST_NONE; this.blinded = false; }
-    return dmg;
+  }
+  tick_status(){
+    if(!this.has_any_status()) return 0;
+    let total_dmg = 0;
+    const cursebane2 = this.has_perk("cursebane");
+    const to_remove = [];
+
+    for(const stypeStr of Object.keys(this.statuses)){
+      const stype = Number(stypeStr);
+      const is_permanent = (stype === ST_CURSE && this.statuses[stype] === -1);
+
+      if(!is_permanent){
+        const tick = (stype === ST_NONE ? 0 : (cursebane2 ? 2 : 1));
+        this.statuses[stype] = Math.max(0, this.statuses[stype] - tick);
+      }
+
+      if(stype === ST_POISON && (is_permanent || this.statuses[stype] > 0)){
+        // Poison kills — no floor
+        const dmg = 2; this.hp -= dmg; total_dmg += dmg;
+      }
+      if(stype === ST_CURSE && (is_permanent || this.statuses[stype] > 0)){
+        // Monster curse (timed): 5% HP drain per step, leaves at 1
+        // Shrine curse (permanent): bigger debuff only, NO damage
+        if(!is_permanent){
+          const dmg = Math.max(1, (this.max_hp * 0.05) | 0);
+          this.hp = Math.max(1, this.hp - dmg);
+          total_dmg += dmg;
+        }
+      }
+
+      // Expire timed statuses
+      if(!is_permanent && this.statuses[stype] <= 0){
+        to_remove.push(stype);
+      }
+    }
+
+    for(const s of to_remove){
+      if(s === ST_CURSE) this._remove_curse_penalty();
+      delete this.statuses[s];
+    }
+    return total_dmg;
   }
   heal(amount){
     if(this.has_perk("medic")) amount = (amount * this.perk_val("heal_m") / 100) | 0;
@@ -626,17 +888,24 @@ class Player {
     this.xp += amount;
     return this.xp >= this.xp_next;
   }
+  _calc_xp_next(lv){
+    // Smooth piecewise curve: early (1-20) → mid (21-35) → late (36-50+)
+    const base = 50 * lv + 5 * lv * lv;
+    const mid  = lv > 20 ? 15 * (lv-20) * (lv-20) : 0;
+    const late = lv > 35 ? 50 * (lv-35) * (lv-35) : 0;
+    return base + mid + late;
+  }
   do_level_up(){
     this.level++; this.xp -= this.xp_next;
-    this.xp_next = (this.xp_next * 1.5) | 0;
+    this.xp_next = this._calc_xp_next(this.level);
     this.max_hp += 6; this.hp = Math.min(this.hp+6, this.max_hp); this.atk++;
-    this.perk_choices = 3 + (this.has_perk("library") ? 1 : 0);
+    this.perk_choices = 3 + (this.buildings && this.buildings.library ? 1 : 0);
   }
-  count_lapis(){ return this.inventory.filter(i => i==="Lapis Lazuli").length; }
+  count_lapis(){ return this.inventory.filter(i => i==="Amaliate").length; }
   remove_lapis(n){
     let removed = 0; const ni = [];
     for(const i of this.inventory){
-      if(i==="Lapis Lazuli" && removed<n) removed++;
+      if(i==="Amaliate" && removed<n) removed++;
       else ni.push(i);
     }
     this.inventory = ni;
@@ -660,7 +929,7 @@ class Player {
   }
   buy_item(name){
     const price = ITEMS[name][1];
-    if(this.gold>=price && this.inventory.length<20){
+    if(this.gold>=price && this.inventory.length<this.max_inv){
       this.gold -= price; this.inventory.push(name);
       this.identified.add(name);
       return true;
@@ -676,34 +945,35 @@ class Player {
       this.inventory.splice(idx,1); return [`+${g} HP`, null];
     }
     if(itype==="cure_p"){
-      const ok = this.status===ST_POISON;
-      if(ok){ this.status=ST_NONE; this.status_turns=0; }
+      const ok = this.has_status(ST_POISON);
+      if(ok){ this.clear_status(ST_POISON); }
       this.inventory.splice(idx,1);
       return [ok?"Poison cured!":"No poison...", null];
     }
     if(itype==="cure_f"){
-      const ok = this.status===ST_FREEZE;
-      if(ok){ this.status=ST_NONE; this.status_turns=0; }
+      const ok = this.has_status(ST_FREEZE);
+      if(ok){ this.clear_status(ST_FREEZE); }
       this.inventory.splice(idx,1);
       return [ok?"Freeze cured!":"Not frozen...", null];
     }
     if(itype==="cure_a"){
-      const old = this.status;
-      this.status=ST_NONE; this.status_turns=0; this.blinded=false;
+      const had_any = this.has_any_status();
+      this.clear_status();  // clears all
       this.inventory.splice(idx,1);
-      return [old!==ST_NONE?"Ailment cured!":"Feeling fine", null];
+      return [had_any?"All ailments cured!":"Feeling fine", null];
     }
     if(itype==="uncurse"){
       if(this.cursed_items.size>0){
         this.cursed_items.clear();
-        this.atk_mod = Math.max(0,this.atk_mod); this.def_mod = Math.max(0,this.def_mod);
+        if(this.has_status(ST_CURSE)) this.clear_status(ST_CURSE);
+        else { this.atk_mod = Math.max(0,this.atk_mod); this.def_mod = Math.max(0,this.def_mod); }
         this.inventory.splice(idx,1); return ["All curses lifted!", null];
       }
       this.inventory.splice(idx,1); return ["No curses to lift", null];
     }
     if(itype==="recall"){ this.inventory.splice(idx,1); return ["Recall!","recall"]; }
-    // Combat scrolls (fire/lit/shield) — consumed via picker, return tag with original name so picker knows which effect to apply
-    if(itype==="fire_s" || itype==="lit_s" || itype==="shield_s"){
+    // Combat scrolls (fire/lit/shield/annihilate) — consumed via picker
+    if(itype==="fire_s" || itype==="lit_s" || itype==="shield_s" || itype==="annihilate"){
       this.inventory.splice(idx,1); return [name, itype];
     }
     if(itype==="id"){ this.inventory.splice(idx,1); return ["id","id"]; }
@@ -742,6 +1012,7 @@ class DungeonMap {
     this.start_x = this.start_y = 2;
     this.is_boss_floor = (floor>0 && floor%5===0);
     this.boss_door = null;
+    this.boss_cleared = false;  // staircase locked on boss floors until boss dies
     // Tile variation seeds (Pass 2 polish): per-tile variant indices for floor/wall
     this.wall_var = Array.from({length:MAP_H}, () => Array(MAP_W).fill(0).map(() => Math.floor(Math.random()*3)));
     this.floor_var = Array.from({length:MAP_H}, () => Array(MAP_W).fill(0).map(() => Math.floor(Math.random()*2)));
@@ -779,11 +1050,14 @@ class DungeonMap {
       while(x!==bx){ this.tiles[y][x]=T_FLOOR; x += (bx>x ? 1 : -1); }
       while(y!==by){ this.tiles[y][x]=T_FLOOR; y += (by>y ? 1 : -1); }
     }
-    // Staircase
+    // Staircase — boss floors don't place stair until boss dies
     const stair_room = (this.is_boss_floor && rooms.length>=2) ? rooms[rooms.length-2] : rooms[rooms.length-1];
     this.stair_x = stair_room[0] + (stair_room[2]/2|0);
     this.stair_y = stair_room[1] + (stair_room[3]/2|0);
-    this.tiles[this.stair_y][this.stair_x] = T_STAIR;
+    if(!this.is_boss_floor){
+      this.tiles[this.stair_y][this.stair_x] = T_STAIR;
+    }
+    // (On boss floors, T_STAIR is placed when boss_cleared becomes true)
     // Town portal in first room
     const fr = rooms[0];
     this.town_x = fr[0]+1; this.town_y = fr[1]+1;
@@ -849,6 +1123,22 @@ class DungeonMap {
         this.tiles[ty][tx] = T_SHRINE;
         this.shrines.add(`${tx},${ty}`);
       }
+    }
+    // Slot machine — 5% chance per floor, one-time use
+    if(Math.random() < 0.05 && rooms.length > 1){
+      const room = rooms[1 + Math.floor(Math.random()*(rooms.length-1))];
+      const tx = room[0] + (room[2]/2|0);
+      const ty = room[1] + (room[3]/2|0);
+      if(this.tiles[ty][tx] === T_FLOOR){
+        this.tiles[ty][tx] = T_SLOT;
+      }
+    }
+    // Dungeon merchant — floor 50+ only, 5% chance, one visit
+    if(this.floor >= 50 && Math.random() < 0.05 && rooms.length > 2){
+      const room = rooms[1 + Math.floor(Math.random()*(rooms.length-2))];
+      const tx = room[0] + 1;
+      const ty = room[1] + 1;
+      if(this.tiles[ty][tx] === T_FLOOR) this.tiles[ty][tx] = T_MERCHANT;
     }
   }
   tile_at(x,y){
@@ -1497,6 +1787,8 @@ const BOSS_SPRITE = {
 
 const STATUS_COLORS = {[ST_POISON]:POISON_C, [ST_FREEZE]:FREEZE_C, [ST_BLIND]:INDIGO, [ST_CURSE]:CURSE_C};
 const STATUS_NAMES  = {[ST_POISON]:"PSN", [ST_FREEZE]:"FRZ", [ST_BLIND]:"BLD", [ST_CURSE]:"CRS"};
+// Base duration (turns) per status type when applied by monsters/traps
+const STATUS_TURNS  = {[ST_POISON]:5, [ST_FREEZE]:4, [ST_BLIND]:4, [ST_CURSE]:16};
 
 // ════════════════════════════════════════════════════════════════
 //  VISUAL POLISH (Pass 2)
@@ -1594,31 +1886,42 @@ function draw_transition(){
 // ── HUD ──────────────────────────────────────────────────────────────
 function draw_hud(p){
   drect(DGRAY, 0, 0, SW, HUD_H);
+
+  // ── Row 1 (y=2): HP text | HP bar | Floor right-anchored ──────────
   const hpf = Math.max(0, p.hp / p.max_hp);
   let hpc = hpf>0.5 ? GREEN : (hpf>0.25 ? ORANGE : RED);
-  // Pulsing HP bar when low (Pass 2)
   if(hpf < 0.25){
     const pulse = Math.sin(performance.now()/120) * 0.5 + 0.5;
     if(pulse > 0.5) hpc = WHITE;
   }
-  hbar(1, 2, 40, 5, hpf, hpc);
-  dtext(`${p.hp}/${p.max_hp}`, 2, 8, WHITE);
-  dtext(`G:${p.gold}`, 44, 2, GOLD);
-  dtext(`B${p.floor}`, 84, 2, LBLUE);
-  dtext(`L${p.level}`, 104, 2, YELLOW);
-  if(p.status !== ST_NONE){
-    const sc = STATUS_COLORS[p.status] || WHITE;
-    const sn = STATUS_NAMES[p.status] || "?";
-    drect(sc, 0, HUD_H-1, SW, 2);
-    dtext(sn, 66, 8, sc);
-  }
-  if(p.cursed_items.size > 0) dtext("C", 118, 8, CURSE_C);
-}
+  dtext(`${p.hp}/${p.max_hp}`, 2, 2, hpc);
+  hbar(44, 3, 54, 5, hpf, hpc, rgb(40,40,50));
+  const fl = `F${p.floor}`;
+  dtext(fl, SW - fl.length*6 - 1, 2, LBLUE);
 
-function draw_xpbar(p){
-  let c = CYAN;
-  if(FX.level_flash > 0 && (FX.level_flash % 4) > 1) c = GOLD;
-  hbar(0, SH-3, SW, 3, Math.min(1, p.xp/p.xp_next), c, DGRAY);
+  // ── Row 2 (y=11): Level | XP-or-Statuses | Gold right-anchored ───────
+  dtext(`L${p.level}`, 2, 11, YELLOW);
+  const active_st = p.active_statuses().filter(s => s !== ST_NONE);
+  if(active_st.length > 0){
+    const parts = active_st.map(s => {
+      const t = p.statuses[s]; const n = STATUS_NAMES[s]||"?";
+      return t===-1 ? `${n}!` : `${n}:${t}`;
+    });
+    const priority = [ST_CURSE,ST_POISON,ST_BLIND,ST_FREEZE];
+    const primary = priority.find(s => active_st.includes(s)) || active_st[0];
+    dtext(parts.join(" ").slice(0,14), 20, 11, STATUS_COLORS[primary]||WHITE);
+  } else {
+    dtext(`${p.xp}/${p.xp_next} XP`, 20, 11, CYAN);
+  }
+  const gs = `${p.gold}G`;
+  dtext(gs, SW - gs.length*6 - 1, 11, GOLD);
+  if(p.cursed_items.size > 0 && !active_st.includes(ST_CURSE)){
+    dtext("C", SW-8, 2, CURSE_C);
+  }
+  if(active_st.length > 0){
+    const primary2 = [ST_CURSE,ST_POISON,ST_BLIND,ST_FREEZE].find(s=>active_st.includes(s))||active_st[0];
+    drect(STATUS_COLORS[primary2]||WHITE, 0, HUD_H-2, SW, 2);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1808,12 +2111,41 @@ class Game {
     this._scroll_dmg = 0;
     this._after_dialog = GS_DUNGEON;
     this._shrine_effect = null;
-    this._id_mode = false;
     this._pending_levelup = false;
-    this._shop_return = GS_VILLAGE;  // where to return when leaving inventory/shop
-    this._home_tab = 0;       // 0=Stats 1=Gear 2=Perks
+    this._shop_return = GS_VILLAGE;  // where to return when leaving shop
+    this._home_tab = 0;       // 0=Stats 1=Gear 2=Perks 3=Beast 4=Inv
     this._home_scroll = 0;
-    this._scroll_return = GS_COMBAT;  // where to return from scroll picker
+    this._inv_subtab = 0;     // 0=Junk+Gems 1=Consumables 2=Gear
+    this._home_inv_focus = 0; // 0=main tabs 1=subtab row 2=item list
+    this._home_inv_cur = 0;   // cursor within item list
+    this._home_inv_grouped = []; // populated by _draw_home_inventory each frame
+    this._combat_inv_subtab = 1; // default to Consumables in combat
+    this._combat_inv_return = GS_COMBAT;
+    this._cinv_scroll = 0;
+    this._cinv_cur = 0;
+    this._scroll_return = GS_COMBAT;
+    this._home_return_gs = GS_VILLAGE;
+    this._levelup_cooldown = 0;
+    this._library_scroll = 0;
+    this._sell_menu_names = [];   // parallel to sell tab menu rows
+    this._juggernaut_stacks = 0;
+    this._spellweave_casts = 0;
+    this._forge_plus_mode = null;
+    this._merchant_stock = [];    // current dungeon merchant items
+    this._merchant_x = 0; this._merchant_y = 0;
+    this._merchant_scroll = 0;
+    // Bestiary — persists across runs (lifetime kill counts)
+    this.bestiary = {};
+    this._bestiary_scroll = 0;
+    // Quantity prompt state
+    this._qty = { title:"", item:"", unit_cost:0, max:1, cur:1, cb:null, ret:GS_SHOP };
+    // Slot machine state
+    this._slot_x = 0; this._slot_y = 0;
+    this._slot_phase = 0;  // 0=bet, 1=spin, 2..4=reel stopping, 5=result
+    this._slot_frame = 0;
+    this._slot_bet   = 0;
+    this._slot_reels = [0,0,0];  // final reel values (0-9)
+    this._slot_shown = [0,0,0];  // currently displayed reel values (spinning)
     // Magic system (per-combat)
     this._magic_charges = 0;     // remaining attack/shield scroll casts this fight
     this._magic_charges_max = 3; // refilled at start of each combat
@@ -1840,12 +2172,14 @@ class Game {
   _refresh_combat_magic(){
     // Called at the start of every combat encounter.
     // Base 3 charges. Arcane perk grants +1.
-    this._magic_charges_max = 3 + (this.p.has_perk("arcane") ? 1 : 0);
+    this._magic_charges_max = 3 + (this.p.has_perk("arcane") ? this.p.perk_val("arcane") : 0);
     this._magic_charges = this._magic_charges_max;
     this._shield_turns = 0;
     this._shield_immune = false;
     this._burn_turns = 0;
     this._burn_dmg = 0;
+    // Deathmark: guaranteed crits at combat start
+    this._deathmark_crits = this.p.has_perk("deathmark") ? this.p.perk_val("dmk") : 0;
   }
   draw_msg(){
     if(this.msg_t > 0){
@@ -1914,7 +2248,6 @@ class Game {
     }
     // Version tag — bottom right corner, always visible
     dtext("v4.2", SW-26, SH-10, rgb(80,70,55));
-    draw_xpbar(this.p);
 
     const e = poll();
     if(e.a){ const banked = this.p.banked; this.p.reset(); this.p.gold += banked; this.gs = GS_VILLAGE; }
@@ -1938,6 +2271,18 @@ class Game {
       if(this._shrine_effect){
         this._apply_shrine_effect(this._shrine_effect);
         this._shrine_effect = null;
+        // Shrine damage or curse might have killed the player
+        if(this.p.hp <= 0){
+          if(this.p.has_perk("phoenix") && this.p.revive_remaining > 0){
+            const ph_td = this.p.perk_tier_data("phoenix");
+            this.p.revive_remaining--;
+            this.p.hp = Math.max(1, Math.floor(this.p.max_hp * (ph_td ? ph_td.hp_frac : 0.05)));
+            this.show_msg("PHOENIX revive!");
+            burst(SW/2, SH/2, GOLD, 24);
+          } else {
+            this.gs = GS_GAMEOVER; return;
+          }
+        }
       }
       if(this._pending_levelup){
         this._pending_levelup = false;
@@ -2030,7 +2375,7 @@ class Game {
       inn:     () => this._open_inn(),
       enchant: () => this._open_enchant_pick(),
       forge:   () => this._open_forge(),
-      library: () => this.show_msg("Perk choices: 4"),
+      library: () => this._open_library(),
       temple:  () => this._open_temple(),
       bank:    () => this._open_bank(),
       home:    () => this._open_home(),
@@ -2038,12 +2383,12 @@ class Game {
     actions[bid]();
   }
   _open_inn(){
-    if(this.p.hp >= this.p.max_hp && this.p.status === ST_NONE){
+    if(this.p.hp >= this.p.max_hp && !this.p.has_any_status()){
       this.show_msg("Already at full health!"); return;
     }
     if(this.p.gold >= 50){
       this.p.gold -= 50; this.p.hp = this.p.max_hp;
-      this.p.status = ST_NONE; this.p.status_turns = 0; this.p.blinded = false;
+      this.p.clear_status();
       this.show_msg("Fully rested!");
     } else this.show_msg("Need 50G to rest!");
   }
@@ -2057,57 +2402,124 @@ class Game {
     this._bldg_mode = "bank"; this.gs = GS_BLDG;
   }
   _open_temple(){
-    const opts = [["Lift Curses(100G)",WHITE], ["Respec Perk(500G)",LPURP], ["-- Depart --",GRAY]];
+    const p = this.p;
+    const inv_rank = p.invocation_rank;
+    const inv_maxed = inv_rank >= 3;
+    const inv_label = inv_maxed
+      ? `Invocation III (MAX)`
+      : `Invoke ${["I","II","III"][inv_rank]} → ${["II","III","MAX"][inv_rank]} (200G)`;
+    const opts = [
+      ["Lift Curses (40G)", WHITE],
+      [inv_label, inv_maxed ? DGRAY : PURPLE],
+      ["-- Depart --", GRAY]
+    ];
     this.menu = new Menu("Temple", opts);
     this._bldg_mode = "temple"; this.gs = GS_BLDG;
   }
 
   // ── HOME ──────────────────────────────────────────────────────────
-  _open_home(){
+  _open_home(ret=GS_VILLAGE){
     this._home_tab = 0;
     this._home_scroll = 0;
+    this._home_return_gs = ret;
     this.gs = GS_HOME;
   }
 
   tick_home(){
     const p = this.p;
     clear_screen(BLACK);
+    const NUM_TABS = 5;
+    const tab_labels = ["Stats","Gear","Perks","Best","Inv"];
 
-    // Top tab bar
+    // Top tab bar — 5 tabs at ~25px each
     drect(DGRAY, 0, 0, SW, 14);
-    const tab_labels = ["Stats","Gear","Perks"];
-    for(let i=0; i<3; i++){
-      const tw = 42, tx = i*tw + 1;
+    for(let i=0; i<NUM_TABS; i++){
+      const tw = 25, tx = i*tw + (i>0?1:0);
       const sel = (i === this._home_tab);
-      drect(sel ? CYAN : MGRAY, tx, 1, tw-2, 12);
-      drect(sel ? WHITE : DGRAY, tx, 1, tw-2, 12, true);
-      dtext(tab_labels[i], tx+10, 3, sel ? BLACK : LBLUE);
+      // Dim main tab row when focus is inside inv
+      const focused_away = (this._home_tab === 4 && this._home_inv_focus > 0);
+      drect(sel ? (focused_away ? DGRAY : CYAN) : MGRAY, tx, 1, tw-1, 12);
+      drect(sel ? (focused_away ? GRAY : WHITE) : DGRAY, tx, 1, tw-1, 12, true);
+      dtext(tab_labels[i], tx+2, 3, sel ? (focused_away ? GRAY : BLACK) : LBLUE);
     }
+    drect(DGRAY, 125, 0, 3, 14);
 
-    // Content area
-    const CY0 = 16;
-    const CY_BOT = SH - 12;  // controls bar starts here
+    const CY0 = 16, CY_BOT = SH - 12;
 
     if(this._home_tab === 0){
       this._draw_home_stats(p, CY0);
     } else if(this._home_tab === 1){
       this._draw_home_gear(p, CY0, CY_BOT);
-    } else {
+    } else if(this._home_tab === 2){
       this._draw_home_perks(p, CY0, CY_BOT);
+    } else if(this._home_tab === 3){
+      this._draw_home_bestiary(CY0, CY_BOT);
+    } else {
+      this._draw_home_inventory(p, CY0, CY_BOT);
     }
 
-    // Bottom controls
     drect(DGRAY, 0, CY_BOT, SW, 12);
-    dtext("L/R:Tab B:Back", 4, CY_BOT+2, GRAY);
-
+    const home_from_dung = this._home_return_gs === GS_DUNGEON;
+    if(this._home_tab === 4 && this._home_inv_focus > 0){
+      dtext("U:back  A:use  L/R:tab", 4, CY_BOT+2, GRAY);
+    } else {
+      dtext(home_from_dung ? "L/R:Tab  D:Inv  B:Resume" : "L/R:Tab  D:Inv  B:Back", 4, CY_BOT+2, GRAY);
+    }
     this.draw_msg();
 
     const e = poll();
-    if(e.l){ this._home_tab = (this._home_tab - 1 + 3) % 3; this._home_scroll = 0; }
-    else if(e.r){ this._home_tab = (this._home_tab + 1) % 3; this._home_scroll = 0; }
-    else if(e.u) this._home_scroll = Math.max(0, this._home_scroll - 1);
-    else if(e.d) this._home_scroll++;  // clamped during draw
-    else if(e.a || e.b || e.m){ this.gs = GS_VILLAGE; return; }
+
+    // Always: B exits Home entirely
+    if(e.b || e.m){
+      this._home_inv_focus = 0; this._home_inv_cur = 0;
+      this.gs = this._home_return_gs; this._home_return_gs = GS_VILLAGE; return;
+    }
+
+    if(this._home_tab !== 4 || this._home_inv_focus === 0){
+      // Normal main-tab navigation
+      if(e.l){ this._home_tab = (this._home_tab-1+NUM_TABS)%NUM_TABS; this._home_scroll=0; this._home_inv_focus=0; }
+      else if(e.r){ this._home_tab = (this._home_tab+1)%NUM_TABS; this._home_scroll=0; this._home_inv_focus=0; }
+      else if(e.u) this._home_scroll = Math.max(0, this._home_scroll-1);
+      else if(e.d){
+        if(this._home_tab === 4){
+          // Down from main tab row enters subtab row
+          this._home_inv_focus = 1;
+        } else {
+          this._home_scroll++;
+        }
+      }
+    } else if(this._home_inv_focus === 1){
+      // Focus on subtab row — L/R switches subtabs, D enters list, U returns to main tabs
+      if(e.l){ this._inv_subtab=(this._inv_subtab-1+3)%3; this._home_scroll=0; this._home_inv_cur=0; }
+      else if(e.r){ this._inv_subtab=(this._inv_subtab+1)%3; this._home_scroll=0; this._home_inv_cur=0; }
+      else if(e.u){ this._home_inv_focus=0; }
+      else if(e.d){ this._home_inv_focus=2; this._home_inv_cur=0; }
+    } else {
+      // Focus on item list — U/D moves cursor, A uses item, U at top returns to subtab row
+      const grouped = this._home_inv_grouped || [];
+      if(e.u){
+        if(this._home_inv_cur <= 0) this._home_inv_focus=1;
+        else { this._home_inv_cur--; if(this._home_inv_cur < this._home_scroll) this._home_scroll--; }
+      }
+      else if(e.d){
+        this._home_inv_cur = Math.min(grouped.length-1, this._home_inv_cur+1);
+        const CY0v = 16, CY_BOTv = SH-12;
+        const ROW_H = 10, list_y = CY0v+24;
+        const visible = ((CY_BOTv - list_y - 2) / ROW_H) | 0;
+        if(this._home_inv_cur >= this._home_scroll + visible) this._home_scroll++;
+      }
+      else if(e.l){ this._inv_subtab=(this._inv_subtab-1+3)%3; this._home_scroll=0; this._home_inv_cur=0; this._home_inv_focus=1; }
+      else if(e.r){ this._inv_subtab=(this._inv_subtab+1)%3; this._home_scroll=0; this._home_inv_cur=0; this._home_inv_focus=1; }
+      else if(e.a && grouped.length){
+        const entry = grouped[this._home_inv_cur];
+        if(entry){
+          const result = p.use_item(entry.raw_idx);
+          if(result && result[0]) this.show_msg(result[0]);
+          // Rebuild grouped after use
+          this._home_inv_cur = Math.min(this._home_inv_cur, Math.max(0,(grouped.length-2)));
+        }
+      }
+    }
   }
 
   _draw_home_stats(p, y){
@@ -2133,7 +2545,7 @@ class Game {
     // Status flags row
     dtext("Status:", 4, ry, GRAY);
     let sx = 42;
-    if(p.status !== ST_NONE){
+    if(p.has_any_status()){
       const sc = STATUS_COLORS[p.status] || WHITE;
       const sn = STATUS_NAMES[p.status] || "?";
       dtext(`${sn}(${p.status_turns})`, sx, ry, sc);
@@ -2149,7 +2561,7 @@ class Game {
       sx += 22;
     }
     if(p.has_perk("phoenix")){
-      dtext(p.revive_used ? "PHX-" : "PHX+", sx, ry, p.revive_used ? GRAY : RED);
+      dtext(p.revive_remaining<=0 ? "PHX-" : "PHX+", sx, ry, p.revive_remaining<=0 ? GRAY : RED);
       sx += 26;
     }
     if(p.cursed_items.size > 0){
@@ -2232,7 +2644,6 @@ class Game {
   _draw_home_list(lines, y, y_bot){
     const ROW_H = 9;
     const visible = Math.floor((y_bot - y - 2) / ROW_H);
-    // Clamp scroll
     const max_scroll = Math.max(0, lines.length - visible);
     if(this._home_scroll > max_scroll) this._home_scroll = max_scroll;
     for(let i=0; i<visible; i++){
@@ -2241,7 +2652,6 @@ class Game {
       const ln = lines[idx];
       dtext(ln.text, 4, y + 2 + i*ROW_H, ln.color);
     }
-    // Scroll indicator
     if(lines.length > visible){
       const sb_x = SW - 4;
       drect(DGRAY, sb_x, y, 2, y_bot - y);
@@ -2251,11 +2661,602 @@ class Game {
     }
   }
 
+  _draw_home_bestiary(y, y_bot){
+    // All 20 monsters + 5 bosses in definition order
+    const ALL_ENTRIES = [
+      ...MONSTERS.map(m => ({ name:m[0], color:m[7], floor:m[1], hp:m[2], atk:m[3], def:m[4], is_boss:false })),
+      ...BOSSES.map(b => ({ name:b[0], color:b[6], floor:b[0]==="Rat King"?5:b[0]==="Bone Colossus"?10:b[0]==="Void Hydra"?15:b[0]==="Lich Lord"?20:25, hp:b[1], atk:b[2], def:b[3], is_boss:true })),
+    ];
+    const killed = ALL_ENTRIES.filter(e => this.bestiary[e.name]);
+    const total = killed.length;
+    // Header
+    const discovered = Object.keys(this.bestiary).length;
+    dtext(`Slain: ${discovered}/25`, 4, y+1, GOLD);
+    const ry = y + 12;
+    const ROW_H = 18;
+    const visible = Math.floor((y_bot - ry) / ROW_H);
+    const max_scroll = Math.max(0, total - visible);
+    if(this._home_scroll > max_scroll) this._home_scroll = max_scroll;
+
+    if(total === 0){
+      dtext("No kills yet!", 22, ry+20, GRAY);
+      dtext("Venture forth!", 18, ry+32, GRAY);
+      return;
+    }
+    for(let i=0; i<visible; i++){
+      const idx = this._home_scroll + i;
+      if(idx >= total) break;
+      const en = killed[idx];
+      const py = ry + i*ROW_H;
+      // Color square icon
+      drect(en.color, 4, py, 8, 8);
+      drect(en.is_boss ? GOLD : WHITE, 4, py, 8, 8, true);
+      // Name + kills
+      const nameCol = en.is_boss ? GOLD : WHITE;
+      dtext(en.name.slice(0,12), 14, py, nameCol);
+      dtext(`x${this.bestiary[en.name]}`, SW-22, py, CYAN);
+      // Stats row (always visible after first kill)
+      dtext(`HP${en.hp} A${en.atk} D${en.def} F${en.floor}`, 14, py+9, GRAY);
+    }
+    // Scroll indicator
+    if(total > visible){
+      drect(DGRAY, SW-4, ry, 2, y_bot-ry);
+      const th = Math.max(4, ((visible/total)*(y_bot-ry))|0);
+      const ty_ = ry + ((this._home_scroll/Math.max(1,total-visible))*(y_bot-ry-th))|0;
+      drect(LBLUE, SW-4, ty_, 2, th);
+    }
+  }
+
+  // ── INVENTORY TAB (3 sub-tabs: Junk+Gems | Consumables+Scrolls | Armor+Weapons) ──
+  _draw_home_inventory(p, y, y_bot){
+    const SUB_TABS = ["Junk+Gems","Consume","Gear"];
+    const stw = (SW-4) / 3 | 0;
+    // Subtab bar — highlighted when focus=1, dimmer otherwise
+    for(let i=0; i<3; i++){
+      const tx = 2 + i*stw;
+      const sel = (this._inv_subtab === i);
+      const focused = (this._home_inv_focus === 1);
+      drect(sel ? (focused?DBLUE:rgb(20,40,60)) : rgb(25,25,25), tx, y, stw-1, 10);
+      drect(sel ? (focused?CYAN:LBLUE) : MGRAY, tx, y, stw-1, 10, true);
+      dtext(SUB_TABS[i].slice(0,8), tx+2, y+1, sel ? WHITE : GRAY);
+    }
+    // Focus indicator on subtab row
+    if(this._home_inv_focus === 1){
+      dtext("▼", SW-8, y+1, CYAN);
+    } else if(this._home_inv_focus === 0){
+      dtext("↓", SW-8, y+1, GRAY);
+    }
+
+    const cy = y + 12;
+
+    // Categorise
+    const junk_types = new Set(["junk","gem"]);
+    const cons_types = new Set(["heal","cure_p","cure_f","cure_a","uncurse","recall","id",
+                                 "lapis","fire_s","lit_s","shield_s","annihilate"]);
+    const gear_types = new Set(["weapon","armor"]);
+
+    const items_in_tab = [];
+    for(let i=0; i<p.inventory.length; i++){
+      const n = p.inventory[i];
+      const itype = ITEMS[n] ? ITEMS[n][2] : "misc";
+      if(this._inv_subtab === 0 && junk_types.has(itype)) items_in_tab.push({name:n, raw_idx:i});
+      else if(this._inv_subtab === 1 && cons_types.has(itype)) items_in_tab.push({name:n, raw_idx:i});
+      else if(this._inv_subtab === 2 && gear_types.has(itype)) items_in_tab.push({name:n, raw_idx:i});
+    }
+
+    // Group stackables
+    const counts = {}; const order = []; const raw_idxs = {};
+    for(const {name:n, raw_idx} of items_in_tab){
+      if(!counts[n]){ counts[n]=0; order.push(n); raw_idxs[n]=raw_idx; }
+      counts[n]++;
+    }
+    // Build grouped array — store on game object so tick_home can access it
+    const grouped = order.map(n => ({name:n, raw_idx:raw_idxs[n], count:counts[n]}));
+    this._home_inv_grouped = grouped;
+
+    const ROW_H = 10;
+    const visible = ((y_bot - cy - 2) / ROW_H) | 0;
+    const max_scroll = Math.max(0, grouped.length - visible);
+    if(this._home_scroll > max_scroll) this._home_scroll = max_scroll;
+    if(this._home_inv_cur > grouped.length-1) this._home_inv_cur = Math.max(0, grouped.length-1);
+
+    if(!grouped.length){
+      dtext("(empty)", 44, cy+20, GRAY);
+    } else {
+      for(let i=0; i<visible; i++){
+        const idx = this._home_scroll + i;
+        if(idx >= grouped.length) break;
+        const {name:n, count} = grouped[idx];
+        const sel = (this._home_inv_focus === 2 && idx === this._home_inv_cur);
+        const col = ITEMS[n] ? ITEMS[n][4] : WHITE;
+        if(sel) drect(DBLUE, 0, cy+i*ROW_H, SW-6, ROW_H-1);
+        let tag = "";
+        if(n === p.weapon) tag = " [W]";
+        else if(n === p.armor) tag = " [A]";
+        if(p.enchants[n]?.length) tag += "★";
+        if(p.is_cursed && p.is_cursed(n)) tag += "(C)";
+        const qty_str = count > 1 ? ` ×${count}` : "";
+        dtext(`${n.slice(0,15)}${qty_str}${tag}`, 3, cy+i*ROW_H+1, sel ? WHITE : col);
+        if(sel) dtext("A", SW-10, cy+i*ROW_H+1, CYAN);
+      }
+    }
+
+    // Scrollbar
+    if(grouped.length > visible){
+      drect(DGRAY, SW-4, cy, 2, y_bot-cy-12);
+      const th = Math.max(4,(visible/grouped.length*(y_bot-cy-12))|0);
+      const ty_ = cy + (this._home_scroll/Math.max(1,grouped.length-visible)*(y_bot-cy-12-th))|0;
+      drect(LBLUE, SW-4, ty_, 2, th);
+    }
+
+    // Bottom hint
+    dtext(`${p.inventory.length}/${p.max_inv} slots`, 4, y_bot-10, GRAY);
+  }
+
+  // ── QUANTITY PROMPT ──────────────────────────────────────────────
+  _open_qty(title, item, unit_cost, max_qty, cb, ret){
+    // unit_cost=0 means selling mode — max_qty is passed directly as the stack size
+    if(max_qty <= 0){ this.show_msg("Nothing to sell!"); return; }
+    this._qty = { title, item, unit_cost, max:max_qty, cur:1, cb, ret };
+    this.gs = GS_QTY_PROMPT;
+  }
+
+  tick_qty_prompt(){
+    const q = this._qty;
+    clear_screen(BLACK);
+    drect(DGRAY, 8, 20, SW-16, 88);
+    drect(GOLD, 8, 20, SW-16, 88, true);
+    drect(DBLUE, 9, 21, SW-18, 14);
+    dtext(q.title.slice(0,18), 12, 24, YELLOW);
+    dtext(q.item.slice(0,18), 12, 38, WHITE);
+    // Quantity picker
+    dtext("QTY:", 12, 54, GRAY);
+    drect(DGRAY, 48, 51, 32, 14);
+    drect(WHITE, 48, 51, 32, 14, true);
+    dtext(String(q.cur), 60, 54, GOLD);
+    dtext(`/${q.max}`, 82, 54, GRAY);
+    // Cost or earnings display
+    const is_sell = q.unit_cost === 0;
+    if(!is_sell){
+      const total = q.cur * q.unit_cost;
+      dtext(`Cost: ${total}G`, 12, 70, GREEN);
+      dtext(`Have: ${this.p.gold}G`, 12, 80, this.p.gold >= total ? GRAY : RED);
+    } else {
+      dtext(`Qty: ${q.cur} of ${q.max}`, 12, 70, CYAN);
+    }
+    dtext("U/D:Change A:OK B:Cancel", 10, 96, GRAY);
+    this.draw_msg();
+    const e = poll();
+    if(e.u || e.r) this._qty.cur = Math.min(q.max, q.cur+1);
+    else if(e.d || e.l) this._qty.cur = Math.max(1, q.cur-1);
+    else if(e.b || e.m){ this.gs = q.ret; }
+    else if(e.a){ q.cb(q.cur); this.gs = q.ret; }
+  }
+
+  // ── SLOT MACHINE ─────────────────────────────────────────────────
+  _open_slot_machine(tx, ty){
+    this._slot_x = tx; this._slot_y = ty;
+    this._slot_phase = 0; this._slot_frame = 0; this._slot_bet = 0;
+    this._slot_reels = [0,0,0];
+    this._slot_shown = [Math.floor(Math.random()*10), Math.floor(Math.random()*10), Math.floor(Math.random()*10)];
+    this.gs = GS_SLOT;
+  }
+
+  _slot_result(){
+    const [a,b,c] = this._slot_reels;
+    const bet = this._slot_bet;
+    const p = this.p;
+    if(a===7 && b===7 && c===7){
+      p.gold += bet * 10;
+      if(p.inventory.length < p.max_inv) p.inventory.push("Lucky Seven");
+      shake(8); flash(GOLD, 12);
+      for(let i=0; i<3; i++) burst(SW/2, SH/2, GOLD, 20);
+      return;
+    }
+    if(a===b && b===c){ p.gold += bet*4; burst(SW/2,SH/2,GOLD,14); return; }
+    const sevens = [a,b,c].filter(x=>x===7).length;
+    if(sevens===2){ p.gold += bet*3; burst(SW/2,SH/2,GOLD,10); return; }
+    if(sevens===1){ p.gold += bet; burst(SW/2,SH/2,YELLOW,6); return; }
+    if(a===b || b===c || a===c){ p.gold += (bet*0.5)|0; return; }
+    if(a===1 && b===1 && c===1){ p.hp=Math.max(1,p.hp-5); shake(4); flash(RED,5); return; }
+    // plain loss — gold already spent
+  }
+
+  _roll_slot_reels(floor){
+    // Higher floors = better 7 odds: base 10%, +1% per 5 floors, cap 20%
+    const sc = Math.min(20, 10 + Math.floor(floor/5));
+    const reel = () => {
+      if(Math.floor(Math.random()*100)+1 <= sc) return 7;
+      let v; do { v=Math.floor(Math.random()*10); } while(v===7);
+      return v;
+    };
+    return [reel(), reel(), reel()];
+  }
+
+  tick_slot(){
+    const p = this.p;
+    const ph = this._slot_phase;
+    clear_screen(rgb(20,10,30));
+    drect(PURPLE, 2, 2, SW-4, SH-4);
+    drect(GOLD, 2, 2, SW-4, SH-4, true);
+    drect(rgb(20,10,30), 4, 4, SW-8, SH-8);
+    dtext("* SLOTS *", 36, 8, GOLD);
+    dtext(`Gold: ${p.gold}G`, 38, 18, YELLOW);
+
+    if(ph === 0){
+      dtext("Place your bet:", 18, 34, WHITE);
+      drect(DGRAY,14,44,44,18); drect(GOLD,14,44,44,18,true);
+      dtext("A: 25G", 20, 51, YELLOW);
+      drect(DGRAY,70,44,44,18); drect(GOLD,70,44,44,18,true);
+      dtext("B: 100G", 74, 51, ORANGE);
+      dtext("Floor "+p.floor+": "+Math.min(20,10+Math.floor(p.floor/5))+"% 7s", 18, 72, DGRAY);
+      dtext("MENU: Leave", 28, 84, GRAY);
+      const e = poll();
+      if(e.m){ this.gs=GS_DUNGEON; return; }
+      if(e.a){
+        if(p.gold>=25){ p.gold-=25; this._slot_bet=25; this._slot_reels=this._roll_slot_reels(p.floor); this._slot_phase=1; this._slot_frame=0; }
+        else this.show_msg("Need 25G!");
+      } else if(e.b){
+        if(p.gold>=100){ p.gold-=100; this._slot_bet=100; this._slot_reels=this._roll_slot_reels(p.floor); this._slot_phase=1; this._slot_frame=0; }
+        else this.show_msg("Need 100G!");
+      }
+      this.draw_msg(); return;
+    }
+
+    // Reel boxes
+    const RX=[18,50,82], RW=26, RY=36, RH=36;
+    for(let i=0; i<3; i++){
+      const stopped = ph > i+1 || (ph===i+1 && this._slot_frame>=28);
+      drect(stopped ? rgb(20,50,20) : rgb(20,15,30), RX[i],RY,RW,RH);
+      drect(GOLD,RX[i],RY,RW,RH,true);
+      const val = stopped ? this._slot_reels[i] : this._slot_shown[i];
+      ctx.font = "bold 20px monospace";
+      ctx.fillStyle = (val===7) ? GOLD : WHITE;
+      const ns = String(val);
+      const nw = ctx.measureText(ns).width;
+      ctx.fillText(ns, (RX[i]+(RW-nw)/2)|0, RY+26);
+      ctx.font = "8px monospace";
+    }
+    dtext(`Bet: ${this._slot_bet}G`, 44, 80, GRAY);
+
+    // Spin: update displayed reels for spinning ones
+    if(this._slot_frame % 3 === 0){
+      for(let i=0; i<3; i++){
+        if(ph<=i+1 && !(ph===i+1 && this._slot_frame>=28))
+          this._slot_shown[i]=Math.floor(Math.random()*10);
+      }
+    }
+    this._slot_frame++;
+
+    // Phase transitions — reel stops every 30 frames
+    if(ph===1&&this._slot_frame>=30){this._slot_phase=2;this._slot_frame=0;}
+    else if(ph===2&&this._slot_frame>=30){this._slot_phase=3;this._slot_frame=0;}
+    else if(ph===3&&this._slot_frame>=30){this._slot_phase=4;this._slot_frame=0;}
+    else if(ph===4&&this._slot_frame>=20){
+      this._slot_result();
+      this.d.tiles[this._slot_y][this._slot_x]=T_FLOOR;
+      this._slot_phase=5; this._slot_frame=0;
+    }
+
+    if(ph===5){
+      const [a,b,c]=this._slot_reels;
+      const is777=a===7&&b===7&&c===7;
+      if(is777){
+        // 777 — big gold pulsing banner
+        const pulse=(Math.sin(performance.now()/80)*0.5+0.5);
+        ctx.fillStyle=`rgba(255,200,0,${0.3+pulse*0.6})`;
+        ctx.fillRect(10,82,SW-20,26);
+        ctx.font="bold 16px monospace";
+        ctx.fillStyle=RED;
+        const txt="7  7  7";
+        const tw2=ctx.measureText(txt).width;
+        ctx.fillText(txt,(SW-tw2)/2|0,100);
+        ctx.font="8px monospace";
+        dtext("JACKPOT!!",36,106,GOLD);
+        if(this._slot_frame%6===0) burst(SW/2,SH/2,GOLD,10);
+        this._slot_frame++;
+      } else {
+        // Show result message based on outcome
+        const sevens=[a,b,c].filter(x=>x===7).length;
+        let msg="";
+        if(a===b&&b===c) msg=`3x${a}! +${this._slot_bet*4}G`;
+        else if(sevens===2) msg=`Two 7s! +${this._slot_bet*3}G`;
+        else if(sevens===1) msg="Lucky 7! Even.";
+        else if(a===b||b===c||a===c) msg=`Pair! +${(this._slot_bet*0.5)|0}G`;
+        else if(a===1&&b===1&&c===1) msg="Snake eyes -5HP!";
+        else msg=`Lost ${this._slot_bet}G.`;
+        dtext(msg.slice(0,18), (SW-msg.slice(0,18).length*6)/2|0, 88, YELLOW);
+      }
+      dtext("A: Leave", 44, is777?116:100, WHITE);
+      const e=poll();
+      if(e.a||e.b||e.m){this.gs=GS_DUNGEON; return;}
+    }
+    this.draw_msg();
+  }
+
+  // ── DUNGEON MERCHANT ─────────────────────────────────────────────
+  // 9-item pool: 3 weapons, 3 armors, Elixir of Life, Soulrender (1% chance),
+  // Scroll of Annihilation (1% chance). Shows 3 random items per visit. Wildly expensive.
+  _build_merchant_pool(){
+    const weapons  = ["Lich Blade","Chaos Edge","Mythril Blade","Void Steel","Dragon Fang"];
+    const armors   = ["Lich Shroud","Chaos Plate","Titan Plate","Void Carapace","Colossus Mail"];
+    const specials = ["Elixir of Life"];
+    // Soulrender and Scroll of Annihilation each have 1% chance to appear
+    if(Math.random() < 0.01) specials.push("Soulrender");
+    if(Math.random() < 0.01) specials.push("Scroll of Annihilation");
+
+    // Pick 1 weapon, 1 armor, 1 from specials, then shuffle for 3 shown
+    const shuffle = a => { for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; };
+    const pool = [
+      shuffle(weapons)[0],
+      shuffle(armors)[0],
+      shuffle(specials)[0],
+    ];
+    return shuffle(pool);
+  }
+
+  _merchant_price(name){
+    // Base sell value × 8 — wildly expensive as intended
+    const base = (ITEMS[name] && ITEMS[name][0]) || 100;
+    return Math.max(800, base * 8);
+  }
+
+  _open_dungeon_merchant(tx, ty){
+    this._merchant_x = tx; this._merchant_y = ty;
+    this._merchant_stock = this._build_merchant_pool();
+    this._merchant_scroll = 0;
+    this.gs = GS_MERCHANT;
+  }
+
+  tick_merchant(){
+    const p = this.p;
+    clear_screen(rgb(15,25,20));
+    drect(TEAL, 0, 0, SW, 18);
+    drect(WHITE, 0, 0, SW, 18, true);
+    dtext("DEEP MERCHANT", 20, 2, BLACK);
+    dtext(`Gold: ${p.gold}G`, 2, 10, GOLD);
+
+    const stock = this._merchant_stock || [];
+    const ROW_H = 26;
+    let y = 22;
+    for(let i=0; i<stock.length; i++){
+      const name = stock[i];
+      if(!name || !ITEMS[name]) continue;
+      const price = this._merchant_price(name);
+      const can_afford = p.gold >= price;
+      const itype = ITEMS[name][2];
+
+      drect(can_afford ? rgb(20,40,30) : rgb(30,20,20), 4, y, SW-8, ROW_H-2);
+      drect(can_afford ? TEAL : RED, 4, y, SW-8, ROW_H-2, true);
+
+      // Item color dot
+      drect(ITEMS[name][4], 6, y+2, 4, 4);
+      dtext(name.slice(0,14), 12, y+2, can_afford ? WHITE : GRAY);
+
+      // Stat line
+      const stat_str = (itype==="weapon") ? `+${ITEMS[name][3]} ATK` :
+                       (itype==="armor")  ? `+${ITEMS[name][3]} DEF` :
+                       (name==="Elixir of Life") ? "Full heal+cleanse" :
+                       (name==="Soulrender") ? "+22ATK lifesteal" :
+                       (name==="Scroll of Annihilation") ? "One-shots target" : "";
+      dtext(stat_str.slice(0,16), 12, y+11, rgb(150,200,170));
+      dtext(`${price}G`, SW-price.toString().length*6-6, y+2, can_afford ? GOLD : rgb(120,60,60));
+      dtext("A:Buy", SW-34, y+11, can_afford ? CYAN : DGRAY);
+
+      y += ROW_H;
+    }
+
+    dtext("U/D:Browse  B:Leave", 6, SH-10, GRAY);
+    this.draw_msg();
+
+    const e = poll();
+    if(e.b || e.m){ this.gs = GS_DUNGEON; return; }
+    if(e.u) this._merchant_scroll = Math.max(0, this._merchant_scroll-1);
+    if(e.d) this._merchant_scroll = Math.min(2, this._merchant_scroll+1);
+    if(e.a){
+      const idx = this._merchant_scroll;
+      const name = stock[idx];
+      if(!name || !ITEMS[name]) return;
+      const price = this._merchant_price(name);
+      if(p.gold < price){ this.show_msg("Not enough gold!"); return; }
+      if(p.inventory.length >= p.max_inv){ this.show_msg("Inventory full!"); return; }
+      p.gold -= price;
+      // Remove from stock
+      this._merchant_stock.splice(idx, 1);
+      // Apply special items directly
+      if(name === "Elixir of Life"){
+        p.hp = p.max_hp;
+        p.clear_status();
+        this.show_msg("Full health restored!");
+        burst(SW/2, SH/2, WHITE, 20);
+      } else if(name === "Scroll of Annihilation"){
+        // Stored in inventory — used from magic picker like other scrolls
+        p.inventory.push(name);
+        this.show_msg("Handle with care...");
+      } else if(name === "Soulrender"){
+        p.inventory.push(name);
+        this.show_msg("Dark power obtained!");
+      } else {
+        p.inventory.push(name);
+        this.show_msg(`Bought ${name.slice(0,12)}!`);
+      }
+      if(this._merchant_stock.length === 0){
+        this.show_msg("Sold out. Farewell.");
+        this.d.tiles[this._merchant_y][this._merchant_x] = T_FLOOR;
+        this.gs = GS_DUNGEON;
+      }
+    }
+  }
+
+  // ── COMBAT INVENTORY ────────────────────────────────────────────
+  // Opened by B during combat/dungeon. Three tabs: Junk+Gems | Consumables | Gear
+  tick_combat_inv(){
+    const p = this.p;
+    const ret = this._combat_inv_return || GS_DUNGEON;
+    clear_screen(BLACK);
+
+    // Header
+    drect(DGRAY, 0, 0, SW, 14);
+    dtext("INVENTORY", 36, 2, WHITE);
+    dtext(`${p.inventory.length}/${p.max_inv}`, 96, 2, GRAY);
+
+    // Sub-tab bar
+    const SUB = ["Junk/Gems","Consume","Gear"];
+    const stw = 42;
+    for(let i=0; i<3; i++){
+      const tx = 1 + i*(stw+1);
+      const sel = this._combat_inv_subtab === i;
+      drect(sel ? DBLUE : rgb(30,30,30), tx, 15, stw, 11);
+      drect(sel ? CYAN : MGRAY, tx, 15, stw, 11, true);
+      dtext(SUB[i], tx+2, 17, sel ? WHITE : GRAY);
+    }
+
+    // Categorise inventory
+    const JUNK_GEM = new Set(["junk","gem"]);
+    const CONSUME  = new Set(["heal","cure_p","cure_f","cure_a","uncurse","recall","id",
+                               "lapis","fire_s","lit_s","shield_s","annihilate"]);
+    const GEAR     = new Set(["weapon","armor"]);
+
+    const items = [];
+    for(let i=0; i<p.inventory.length; i++){
+      const n = p.inventory[i];
+      const itype = ITEMS[n] ? ITEMS[n][2] : "misc";
+      const bucket = JUNK_GEM.has(itype)?0 : CONSUME.has(itype)?1 : GEAR.has(itype)?2 : -1;
+      if(bucket === this._combat_inv_subtab) items.push({name:n, raw_idx:i});
+    }
+
+    // Group for display (stack consumables/junk)
+    const STACKABLE = new Set(["junk","gem","heal","cure_p","cure_f","cure_a","uncurse",
+                                "recall","id","lapis","fire_s","lit_s","shield_s","annihilate"]);
+    const grouped = []; const seen = {};
+    for(const {name:n, raw_idx} of items){
+      const itype = ITEMS[n] ? ITEMS[n][2] : "misc";
+      if(STACKABLE.has(itype)){
+        if(!seen[n]){ seen[n]={name:n, raw_idx, count:0}; grouped.push(seen[n]); }
+        seen[n].count++;
+      } else {
+        grouped.push({name:n, raw_idx, count:1});
+      }
+    }
+
+    // Scroll
+    const ROW_H = 10;
+    const list_y = 28;
+    const visible = ((SH - list_y - 14) / ROW_H) | 0;
+    if(!this._cinv_scroll) this._cinv_scroll = 0;
+    this._cinv_scroll = Math.min(this._cinv_scroll, Math.max(0, grouped.length - visible));
+    if(!this._cinv_cur) this._cinv_cur = 0;
+    this._cinv_cur = Math.max(0, Math.min(this._cinv_cur, grouped.length - 1));
+
+    if(!grouped.length){
+      dtext("(empty)", 44, list_y+20, GRAY);
+    } else {
+      for(let i=0; i<visible; i++){
+        const idx = this._cinv_scroll + i;
+        if(idx >= grouped.length) break;
+        const {name:n, count} = grouped[idx];
+        const sel = idx === this._cinv_cur;
+        const col = ITEMS[n] ? ITEMS[n][4] : WHITE;
+        if(sel) drect(DBLUE, 0, list_y+i*ROW_H, SW-6, ROW_H-1);
+        let tag = "";
+        if(n === p.weapon) tag = "[W]";
+        else if(n === p.armor) tag = "[A]";
+        if(p.enchants[n]?.length) tag += "★";
+        if(p.is_cursed && p.is_cursed(n)) tag += "(C)";
+        const qty = count > 1 ? ` ×${count}` : "";
+        dtext(`${n.slice(0,16)}${qty}${tag}`, 3, list_y+i*ROW_H+1, sel ? WHITE : col);
+        if(sel) dtext("A:use", SW-32, list_y+i*ROW_H+1, CYAN);
+      }
+    }
+
+    // Bottom bar
+    drect(DGRAY, 0, SH-12, SW, 12);
+    dtext("L/R:Tab U/D:Pick A:Use B:Back", 2, SH-10, GRAY);
+    this.draw_msg();
+
+    const e = poll();
+    if(e.b || e.m){ this.gs = ret; this._cinv_scroll=0; this._cinv_cur=0; return; }
+    if(e.l){ this._combat_inv_subtab=(this._combat_inv_subtab-1+3)%3; this._cinv_scroll=0; this._cinv_cur=0; }
+    else if(e.r){ this._combat_inv_subtab=(this._combat_inv_subtab+1)%3; this._cinv_scroll=0; this._cinv_cur=0; }
+    else if(e.u){
+      this._cinv_cur = Math.max(0, this._cinv_cur-1);
+      if(this._cinv_cur < this._cinv_scroll) this._cinv_scroll = this._cinv_cur;
+    }
+    else if(e.d){
+      this._cinv_cur = Math.min(grouped.length-1, this._cinv_cur+1);
+      if(this._cinv_cur >= this._cinv_scroll + visible) this._cinv_scroll++;
+    }
+    else if(e.a && grouped.length){
+      const entry = grouped[this._cinv_cur];
+      if(!entry) return;
+      const itype_check = ITEMS[entry.name] ? ITEMS[entry.name][2] : "misc";
+      // Combat scrolls must be in actual combat to fire
+      const in_combat = (ret === GS_COMBAT || ret === GS_BOSS_COMBAT);
+      if((itype_check === "fire_s" || itype_check === "lit_s" || itype_check === "annihilate") && !in_combat){
+        this.show_msg("Use in battle!");
+        return;
+      }
+      if(itype_check === "shield_s" && !in_combat){
+        this.show_msg("Use in battle!");
+        return;
+      }
+      const result = p.use_item(entry.raw_idx);
+      if(!result) return;
+      const [msg, tag] = result;
+      // Apply scroll effects directly
+      if(tag === "fire_s" || tag === "lit_s"){
+        // msg holds the scroll's display name; SCROLL_DATA indexes by that name
+        const d = SCROLL_DATA[msg];
+        if(d){
+          const color = (tag === "fire_s") ? ORANGE : YELLOW;
+          this._cast_damage_scroll(msg, d, color);
+        }
+        this.gs = ret; return;
+      }
+      if(tag === "shield_s"){
+        const d = SCROLL_DATA[msg];
+        if(d){
+          const total_turns = d.turns + this.p.invocation_rank;
+          this._shield_turns = total_turns;
+          this._shield_immune = !!d.status_immune;
+          this.show_msg(`Shield ${total_turns} turn${total_turns>1?"s":""}!`);
+          burst(SW/2, SH-30, d.color, 18);
+          flash(d.color, 5);
+        }
+        this.gs = ret; return;
+      }
+      if(tag === "annihilate"){
+        // Instant kill regular monsters; 30% boss HP
+        if(this.is_boss_fight && this.boss_data){
+          const dmg = (this.boss_data[1] * 0.30) | 0;
+          this.boss_data[2] -= dmg;
+          this.show_msg(`Annihilate! -${dmg}HP!`);
+        } else if(this.combat_mon){
+          this.combat_mon[2] = 0;
+          this.show_msg("Annihilated!");
+        }
+        FX.combat_target_flash = 8; shake(8); flash(WHITE, 10);
+        burst(64, 28, WHITE, 30);
+        this.gs = ret; return;
+      }
+      if(tag === "recall"){
+        this.gs = GS_VILLAGE;
+        this.show_msg(msg || "Recalled");
+        return;
+      }
+      // For weapons/armor equipped or normal consumables, just show the message
+      if(msg) this.show_msg(msg);
+      // Rebuild cursor position to handle stack reduction
+      const new_grouped_len = Math.max(0, grouped.length - 1);
+      if(this._cinv_cur > new_grouped_len-1) this._cinv_cur = Math.max(0, new_grouped_len-1);
+    }
+  }
+
   // ── SCROLL PICKER (Magic button in combat) ───────────────────────
   _open_scroll_picker(){
     // Picker shows: damage/shield scrolls (cost a charge) + status cures (FREE)
     // Does NOT show: Recall (escape, not magic), ID, equipment, healing potions.
-    const cost_charge = new Set(["fire_s","lit_s","shield_s"]);
+    const cost_charge = new Set(["fire_s","lit_s","shield_s","annihilate"]);
     const free_use    = new Set(["cure_p","cure_f","cure_a","uncurse"]);
     const counts = {};
     const order = [];
@@ -2332,7 +3333,7 @@ class Game {
       }
       // Combat scrolls — apply effect immediately
       if(tag === "fire_s"){
-        this._magic_charges--;
+        if(this.p.has_perk("spellweave") && this.p.perk_val("spw")>=2){ this._spellweave_casts++; if(this._spellweave_casts%3!==0) this._magic_charges--; } else this._magic_charges--;
         const d = SCROLL_DATA[target_name];
         this._cast_damage_scroll(target_name, d, ORANGE);
         // Apply burn (reuse poison DoT but tracked separately on the target)
@@ -2342,20 +3343,38 @@ class Game {
         return;
       }
       if(tag === "lit_s"){
-        this._magic_charges--;
+        if(this.p.has_perk("spellweave") && this.p.perk_val("spw")>=2){ this._spellweave_casts++; if(this._spellweave_casts%3!==0) this._magic_charges--; } else this._magic_charges--;
         const d = SCROLL_DATA[target_name];
         this._cast_damage_scroll(target_name, d, YELLOW);
         this.gs = this._scroll_return;
         return;
       }
       if(tag === "shield_s"){
-        this._magic_charges--;
+        if(this.p.has_perk("spellweave") && this.p.perk_val("spw")>=2){ this._spellweave_casts++; if(this._spellweave_casts%3!==0) this._magic_charges--; } else this._magic_charges--;
         const d = SCROLL_DATA[target_name];
-        this._shield_turns = d.turns;
+        const total_turns = d.turns + this.p.invocation_rank;
+        this._shield_turns = total_turns;
         this._shield_immune = !!d.status_immune;
-        this.show_msg(`Shield ${d.turns} turn${d.turns>1?"s":""}!`);
+        this.show_msg(`Shield ${total_turns} turn${total_turns>1?"s":""}!`);
         burst(SW/2, SH-30, d.color, 18);
         flash(d.color, 5);
+        this.gs = this._scroll_return;
+        return;
+      }
+      if(tag === "annihilate"){
+        this._magic_charges--;
+        // Against regular monsters: instant kill. Against bosses: deal 30% of max HP.
+        if(this.is_boss_fight && this.boss_data){
+          const dmg = (this.boss_data[1] * 0.30) | 0;
+          this.boss_data[2] -= dmg;
+          this.show_msg(`Annihilate! -${dmg}HP!`);
+        } else if(this.combat_mon){
+          this.combat_mon[2] = 0;
+          this.show_msg("Annihilated!");
+        }
+        FX.combat_target_flash = 8;
+        shake(8); flash(WHITE, 10);
+        burst(64, 28, WHITE, 30);
         this.gs = this._scroll_return;
         return;
       }
@@ -2367,13 +3386,21 @@ class Game {
 
   // Apply immediate damage from a Fire/Lightning scroll to whatever target we're fighting.
   _cast_damage_scroll(name, d, color){
-    const dmg = d.dmg;
+    // Base dmg + flat invocation bonus (+5 per rank)
+    const inv_bonus = this.p.invocation_rank * 5;
+    let dmg = d.dmg + inv_bonus;
+    // Warlock perk: +25% (T1) or +50% (T2) per invocation rank
+    if(this.p.has_perk("warlock") && this.p.invocation_rank > 0){
+      const wlck_pct = this.p.perk_val("wlck") === 2 ? 0.50 : 0.25;
+      dmg = (dmg * (1 + wlck_pct * this.p.invocation_rank)) | 0;
+    }
     if(this.is_boss_fight && this.boss_data){
       this.boss_data[2] -= dmg;
     } else if(this.combat_mon){
       this.combat_mon[2] -= dmg;
     }
-    this.show_msg(`${name.split(" ").pop()} -${dmg}!`);
+    const bonus_tag = inv_bonus > 0 ? `(+${inv_bonus})` : "";
+    this.show_msg(`${name.split(" ").pop()} -${dmg}!${bonus_tag}`);
     FX.combat_target_flash = 6;
     shake(5);
     flash(color, 6);
@@ -2384,62 +3411,58 @@ class Game {
   // ── SHOP ──────────────────────────────────────────────────────────
   _open_shop(){ this._shop_tab = 0; this._build_shop_menu(); this.gs = GS_SHOP; }
   _build_shop_menu(){
+    // Defensive: clamp _shop_tab to 0/1 in case of stale state from old 3-tab logic
+    if(this._shop_tab !== 0 && this._shop_tab !== 1) this._shop_tab = 0;
     const p = this.p;
     if(this._shop_tab === 0){
       const opts = SHOP_STOCK.map(n => [`${n} $${ITEMS[n][1]}`, ITEMS[n][4]]);
       opts.push(["-- Depart --", GRAY]);
-      this.menu = new Menu("Buy [L/R tab]", opts);
-    } else if(this._shop_tab === 1){
-      const inv = p.inventory;
-      const opts = [];
-      for(const n of inv){
-        let tag = "";
-        if(n === p.weapon) tag += "[W]";
-        else if(n === p.armor) tag += "[A]";
-        if(p.enchants[n] && p.enchants[n].length) tag += "★";
-        if(p.is_cursed(n)) tag += "(C)";
-        const col = p.is_cursed(n) ? CURSE_C : (p.enchants[n] && p.enchants[n].length ? GOLD : ITEMS[n][4]);
-        opts.push([`${n} $${ITEMS[n][0]}${tag}`, col]);
-      }
-      if(!opts.length) opts.push(["(nothing)", GRAY]);
-      opts.push(["-- Depart --", GRAY]);
-      this.menu = new Menu("Sell [L/R tab]", opts);
+      this.menu = new Menu("Buy  [L/R: Sell]", opts);
     } else {
+      // SELL — group identical items, show count, show unit price
       const inv = p.inventory;
+      const seen = new Map();
+      for(let i=0; i<inv.length; i++){
+        const n = inv[i];
+        if(!seen.has(n)) seen.set(n, {count:0});
+        seen.get(n).count++;
+      }
       const opts = [];
-      for(const n of inv){
+      this._sell_menu_names = [];
+      for(const [n, {count}] of seen){
         let tag = "";
         if(n === p.weapon) tag += "[W]";
         else if(n === p.armor) tag += "[A]";
         if(p.enchants[n] && p.enchants[n].length) tag += "★";
         if(p.is_cursed(n)) tag += "(C)";
-        else if(!p.is_identified(n) && (ITEMS[n][2]==="weapon" || ITEMS[n][2]==="armor")) tag += "?";
-        const col = p.is_cursed(n) ? CURSE_C : (p.enchants[n] && p.enchants[n].length ? GOLD : ITEMS[n][4]);
-        opts.push([`${n}${tag}`, col]);
+        const col = p.is_cursed(n) ? CURSE_C : (p.enchants[n]?.length ? GOLD : ITEMS[n][4]);
+        const qty_tag = count > 1 ? ` x${count}` : "";
+        opts.push([`${n}${qty_tag} $${ITEMS[n][0]}${tag}`, col]);
+        this._sell_menu_names.push(n);
       }
-      if(!opts.length) opts.push(["(empty)", GRAY]);
+      if(!opts.length) opts.push(["(nothing to sell)", GRAY]);
       opts.push(["-- Depart --", GRAY]);
-      this.menu = new Menu("Inventory", opts);
+      this.menu = new Menu("Sell  [L/R: Buy]", opts);
     }
   }
   tick_shop(){
     clear_screen(BLACK); this.menu.draw();
-    dtext(`Gold:${this.p.gold}`, 4, SH-10, GOLD);
-    // Lock to Inventory tab when opened from anywhere except the village
-    const inv_only = this._shop_return !== GS_VILLAGE;
-    if(inv_only){
-      // Show only the Inv label, centered, to make it clear what's accessible
-      dtext("Inventory", 44, SH-18, YELLOW);
-    } else {
-      const labels = ["Buy","Sell","Inv"];
-      for(let i=0; i<3; i++) dtext(labels[i], 4+i*38, SH-18, i===this._shop_tab ? YELLOW : GRAY);
+    dtext(`Gold:${this.p.gold}G`, 4, SH-10, GOLD);
+    // Tab indicator — village shop only has Buy / Sell
+    const labels = ["Buy","Sell"];
+    const bar_w = 30;
+    for(let i=0; i<2; i++){
+      const sel = i === this._shop_tab;
+      drect(sel ? DBLUE : DGRAY, 2+i*32, SH-20, bar_w, 9);
+      drect(sel ? CYAN : GRAY, 2+i*32, SH-20, bar_w, 9, true);
+      dtext(labels[i], 8+i*32, SH-18, sel ? WHITE : GRAY);
     }
     this.draw_msg();
     const e = poll();
     if(e.u) this.menu.move(-1);
     else if(e.d) this.menu.move(1);
-    else if(e.l && !inv_only){ this._shop_tab = (this._shop_tab-1+3)%3; this._build_shop_menu(); }
-    else if(e.r && !inv_only){ this._shop_tab = (this._shop_tab+1)%3; this._build_shop_menu(); }
+    else if(e.l){ this._shop_tab = (this._shop_tab-1+2)%2; this._build_shop_menu(); }
+    else if(e.r){ this._shop_tab = (this._shop_tab+1)%2; this._build_shop_menu(); }
     else if(e.b || e.m){ this.gs = this._shop_return; this._shop_return = GS_VILLAGE; return; }
     else if(e.a){
       const sel = this.menu.sel(); const idx = this.menu.sel_idx();
@@ -2447,51 +3470,50 @@ class Game {
       if(this._shop_tab === 0){
         const name = SHOP_STOCK[idx];
         if(name){
-          const ok = this.p.buy_item(name);
-          this.show_msg(ok ? `Bought ${name}` : "Insufficient coin");
-          this._build_shop_menu();
-        }
-      } else if(this._shop_tab === 1){
-        const earned = this.p.sell_item(idx);
-        this.show_msg(earned ? `+${earned}G!` : "Unequip first!");
-        this._build_shop_menu();
-      } else {
-        if(idx < this.p.inventory.length){
-          this._handle_inv_use(idx);
-          this._build_shop_menu();
-        }
-      }
-    }
-  }
-
-  _handle_inv_use(idx){
-    if(this._id_mode){
-      if(idx < this.p.inventory.length){
-        const name = this.p.inventory[idx];
-        if(ITEMS[name][2]==="weapon" || ITEMS[name][2]==="armor"){
-          if(!this.p.is_identified(name)){
-            if(ITEMS[name][5]>0 && Math.floor(Math.random()*100)+1 <= ITEMS[name][5]) this.p.cursed_items.add(name);
-            this.p.identified.add(name);
+          const price = ITEMS[name][1];
+          const max_can_buy = Math.min(Math.floor(this.p.gold / price), this.p.max_inv - this.p.inventory.length);
+          const itype = ITEMS[name][2];
+          if(itype === "weapon" || itype === "armor"){
+            const ok = this.p.buy_item(name);
+            this.show_msg(ok ? `Bought ${name}` : "Insufficient coin");
+            this._build_shop_menu();
+          } else {
+            this._open_qty(`Buy: ${name.slice(0,12)}`, `${price}G each`, price, max_can_buy, (qty) => {
+              let bought = 0;
+              for(let i=0; i<qty; i++){
+                if(this.p.buy_item(name)) bought++; else break;
+              }
+              this.show_msg(`Bought ${bought}x ${name.slice(0,10)}`);
+              this._build_shop_menu();
+            }, GS_SHOP);
           }
-          if(this.p.is_cursed(name)) this.show_msg(`${name.slice(0,8)}: CURSED!`);
-          else this.show_msg(`${name.slice(0,10)}: clean`);
-        } else this.show_msg("Not equippable");
+        }
+      } else {
+        // Sell tab
+        const sell_names = this._sell_menu_names || [];
+        if(idx >= sell_names.length){ this._build_shop_menu(); return; }
+        const sell_name = sell_names[idx];
+        const sell_count = this.p.inventory.filter(n => n === sell_name).length;
+        const unit_sell = ITEMS[sell_name][0];
+        if(sell_count > 1){
+          this._open_qty(`Sell: ${sell_name.slice(0,12)}`, `${unit_sell}G each`, 0, sell_count, (qty) => {
+            let earned = 0;
+            for(let i=0; i<qty; i++){
+              const ri = this.p.inventory.indexOf(sell_name);
+              if(ri < 0) break;
+              earned += this.p.sell_item(ri);
+            }
+            this.show_msg(`+${earned}G from ${qty}x!`);
+            this._build_shop_menu();
+          }, GS_SHOP);
+        } else {
+          const ri = this.p.inventory.indexOf(sell_name);
+          const earned = ri >= 0 ? this.p.sell_item(ri) : 0;
+          this.show_msg(earned ? `+${earned}G!` : "Unequip first!");
+          this._build_shop_menu();
+        }
       }
-      this._id_mode = false;
-      return;
     }
-    const [msg, tag] = this.p.use_item(idx);
-    if(tag === "recall") this.gs = GS_VILLAGE;
-    else if(tag === "fire_s" || tag === "lit_s" || tag === "shield_s"){
-      // Combat scroll used outside combat — give it back and warn
-      this.p.inventory.splice(idx, 0, msg);  // msg is the item name for these tags
-      this.show_msg("Use in battle!");
-    } else if(tag === "id"){
-      this._id_mode = true;
-      this.show_msg("Choose item to ID");
-    } else if(tag === "cursed"){
-      this.show_msg("Cursed item equipped!");
-    } else this.show_msg(msg);
   }
 
   // ── ENCHANT ───────────────────────────────────────────────────────
@@ -2527,7 +3549,7 @@ class Game {
     const lapis = this.p.count_lapis();
     drect(INDIGO, 0, 0, SW, 14);
     dtext("ENCHANTING", 4, 3, LPURP);
-    dtext(`Lap:${lapis} L:${this.p.level}`, 68, 3, LBLUE);
+    dtext(`Ama:${lapis} L:${this.p.level}`, 68, 3, LBLUE);
     this.menu.draw();
     dtext("A:Select B:Back", 4, SH-10, GRAY);
     this.draw_msg();
@@ -2543,7 +3565,7 @@ class Game {
       } else {
         if(idx < this._ench_pool.length){
           const enc = this._ench_pool[idx];
-          if(this.p.count_lapis() < enc[1]){ this.show_msg(`Need ${enc[1]} Lapis!`); return; }
+          if(this.p.count_lapis() < enc[1]){ this.show_msg(`Need ${enc[1]} Amaliate!`); return; }
           if(this.p.level < enc[2]){ this.show_msg(`Need level ${enc[2]}!`); return; }
           this.p.remove_lapis(enc[1]);
           if(!this.p.enchants[this._ench_item]) this.p.enchants[this._ench_item] = [];
@@ -2583,25 +3605,68 @@ class Game {
       const sel = this.menu.sel();
       if(!sel || sel.indexOf("Depart")!==-1){ this.gs = GS_VILLAGE; return; }
       if(this._bldg_mode === "forge"){
-        if(this.p.gold < 200){ this.show_msg("Need 200G!"); return; }
-        this.p.gold -= 200; const t = ITEMS[sel][2];
-        if(t === "weapon"){ this.p.atk += 2; this.show_msg(`${sel.slice(0,10)}+2ATK`); }
-        else { this.p.defense += 1; this.show_msg(`${sel.slice(0,10)}+1DEF`); }
-        burst(SW/2, SH/2, ORANGE, 18);
-        this.gs = GS_VILLAGE;
+        const max_std = Math.floor(this.p.gold / 200);
+        const max_prem = Math.min(Math.floor(this.p.gold / 400), Math.floor(this.p.count_lapis() / 3));
+        if(max_std <= 0 && max_prem <= 0){ this.show_msg("Need 200G!"); return; }
+        const item_type = ITEMS[sel][2];
+        const std_stat  = item_type === "weapon" ? "+2 ATK" : "+1 DEF";
+        const prem_stat = item_type === "weapon" ? "+4 ATK" : "+2 DEF";
+        // Standard forge vs Premium forge (Forge+)
+        if(sel === this._forge_plus_mode){
+          // Premium forge chosen
+          if(max_prem <= 0){ this.show_msg("Need 400G+3 Amaliate!"); this._forge_plus_mode = null; return; }
+          this._open_qty(`Forge+ ${sel.slice(0,8)}`, `${prem_stat} ea · 400G+3 Amaliate`, 400, max_prem, (qty) => {
+            this.p.gold -= qty * 400;
+            this.p.remove_lapis(qty * 3);
+            if(item_type === "weapon") this.p.atk += 4 * qty;
+            else this.p.defense += 2 * qty;
+            burst(SW/2, SH/2, GOLD, 24);
+            this.show_msg(`${sel.slice(0,8)} ${prem_stat} x${qty}`);
+          }, GS_VILLAGE);
+          this._forge_plus_mode = null;
+        } else {
+          // Offer choice: Standard or Forge+
+          if(this.p.count_lapis() >= 3 && this.p.gold >= 400){
+            this._forge_plus_mode = sel;
+            const opts = [
+              [`Standard: ${std_stat} (200G)`, WHITE],
+              [`Forge+: ${prem_stat} (400G+3 Amaliate)`, GOLD],
+              ["-- Cancel --", GRAY]
+            ];
+            this.menu = new Menu(`Forge ${sel.slice(0,10)}`, opts);
+            return;
+          } else {
+            // Can only afford standard
+            this._open_qty(`Forge ${sel.slice(0,10)}`, `${std_stat} ea · 200G`, 200, max_std, (qty) => {
+              this.p.gold -= qty * 200;
+              if(item_type === "weapon") this.p.atk += 2 * qty;
+              else this.p.defense += 1 * qty;
+              burst(SW/2, SH/2, ORANGE, 18);
+              this.show_msg(`${sel.slice(0,8)} ${std_stat} x${qty}`);
+            }, GS_VILLAGE);
+          }
+        }
       } else if(this._bldg_mode === "temple"){
         if(sel.indexOf("Lift Curses") !== -1){
-          if(this.p.cursed_items.size===0){ this.show_msg("No curses!"); return; }
-          if(this.p.gold < 100){ this.show_msg("Need 100G!"); return; }
-          this.p.gold -= 100; this.p.cursed_items.clear();
-          this.p.atk_mod = Math.max(0, this.p.atk_mod);
-          this.p.def_mod = Math.max(0, this.p.def_mod);
+          const has_item_curse = this.p.cursed_items.size > 0;
+          const has_status_curse = this.p.has_status(ST_CURSE);
+          if(!has_item_curse && !has_status_curse){ this.show_msg("No curses!"); return; }
+          if(this.p.gold < 40){ this.show_msg("Need 40G!"); return; }
+          this.p.gold -= 40;
+          this.p.cursed_items.clear();
+          if(has_status_curse) this.p.clear_status(ST_CURSE);  // only clear curse, not poison/freeze etc
           this.show_msg("Curses lifted!");
-        } else if(sel.indexOf("Respec") !== -1){
-          if(!this.p.perks.length){ this.show_msg("No perks!"); return; }
-          if(this.p.gold < 500){ this.show_msg("Need 500G!"); return; }
-          this.p.gold -= 500; const pk = this.p.perks.pop();
-          this.show_msg(`Removed ${pk[1].slice(0,8)}`);
+        } else if(sel.indexOf("Invoke") !== -1 && !sel.includes("MAX")){
+          if(this.p.invocation_rank >= 3){ this.show_msg("Already maxed!"); return; }
+          if(this.p.gold < 200){ this.show_msg("Need 200G!"); return; }
+          this.p.gold -= 200;
+          this.p.invocation_rank++;
+          const rank_name = ["I","II","III"][this.p.invocation_rank-1];
+          burst(SW/2, SH/2, PURPLE, 18);
+          this.show_msg(`Invocation ${rank_name}! +5 spell dmg`);
+          // Rebuild temple menu to show updated rank
+          this._open_temple();
+          return;
         } else this.gs = GS_VILLAGE;
       } else if(this._bldg_mode === "bank"){
         if(sel.indexOf("Deposit") !== -1){
@@ -2623,6 +3688,108 @@ class Game {
           this._open_bank();
         }
       }
+    }
+  }
+
+  // ── LIBRARY ───────────────────────────────────────────────────────
+  // Junk exchange: trade monster drops for XP. Bulk bonus: 3+=2x, 6+=3x, 9+=4x.
+  _open_library(){
+    this._library_scroll = 0;
+    this.gs = GS_LIBRARY;
+  }
+
+  tick_library(){
+    const JUNK_XP = {
+      "Old Coin":3, "Rat Whiskers":4, "Goblin Ear":5,
+      "Cracked Skull":8, "Troll Wart":15
+    };
+    const p = this.p;
+    clear_screen(BLACK);
+    // Header
+    drect(LBLUE, 0, 0, SW, 14);
+    dtext("LIBRARY", 40, 3, WHITE);
+    dtext(`Lv${p.level}`, 98, 3, YELLOW);
+
+    // Build list of junk the player has, grouped
+    const junk_counts = {};
+    for(const name of p.inventory){
+      if(name in JUNK_XP) junk_counts[name] = (junk_counts[name]||0) + 1;
+    }
+    const junk_types = Object.keys(junk_counts);
+
+    if(!junk_types.length){
+      dtext("No junk items.", 18, 40, GRAY);
+      dtext("Kill monsters to", 12, 54, GRAY);
+      dtext("collect loot.", 20, 64, GRAY);
+      dtext("B: Back", 44, 100, GRAY);
+      const e = poll();
+      if(e.b || e.m) this.gs = GS_VILLAGE;
+      return;
+    }
+
+    // Info bar
+    dtext("Study junk for XP", 8, 16, CYAN);
+    dtext("3+=2x 6+=3x 9+=4x", 8, 25, GRAY);
+
+    // List entries
+    const ROW_H = 16;
+    const list_y = 35;
+    const visible = ((SH - list_y - 20) / ROW_H)|0;
+    this._library_scroll = Math.min(this._library_scroll, Math.max(0, junk_types.length - visible));
+    for(let i=0; i<visible; i++){
+      const idx = this._library_scroll + i;
+      if(idx >= junk_types.length) break;
+      const name = junk_types[idx];
+      const qty = junk_counts[name];
+      const base_xp = JUNK_XP[name];
+      const mult = qty >= 9 ? 4 : qty >= 6 ? 3 : qty >= 3 ? 2 : 1;
+      const total_xp = base_xp * qty * mult;
+      const py = list_y + i * ROW_H;
+      // Row bg
+      drect(DGRAY, 2, py, SW-4, ROW_H-2);
+      drect(mult > 1 ? GOLD : GRAY, 2, py, SW-4, ROW_H-2, true);
+      dtext(`${name.slice(0,12)} x${qty}`, 5, py+2, ITEMS[name]?ITEMS[name][4]:WHITE);
+      const bonus_label = mult > 1 ? ` [${mult}x]` : "";
+      dtext(`+${total_xp}XP${bonus_label}`, 5, py+9, mult>1 ? GOLD : CYAN);
+      dtext("A", SW-12, py+4, YELLOW);
+    }
+    // Scroll
+    if(junk_types.length > visible){
+      drect(DGRAY, SW-4, list_y, 2, SH-list_y-18);
+      const th = Math.max(4, (visible/junk_types.length*(SH-list_y-18))|0);
+      const ty_ = list_y + (this._library_scroll/Math.max(1,junk_types.length-visible)*(SH-list_y-18-th))|0;
+      drect(LBLUE, SW-4, ty_, 2, th);
+    }
+    drect(DGRAY, 0, SH-14, SW, 14);
+    dtext("U/D:Browse A:Study B:Back", 4, SH-11, GRAY);
+    this.draw_msg();
+
+    const e = poll();
+    if(e.u) this._library_scroll = Math.max(0, this._library_scroll-1);
+    else if(e.d) this._library_scroll = Math.min(Math.max(0, junk_types.length-visible), this._library_scroll+1);
+    else if(e.b || e.m){ this.gs = GS_VILLAGE; return; }
+    else if(e.a){
+      // Study the item currently at the top of visible list
+      const idx = this._library_scroll;
+      if(idx >= junk_types.length) return;
+      const name = junk_types[idx];
+      const qty = junk_counts[name];
+      const base_xp = JUNK_XP[name];
+      const mult = qty >= 9 ? 4 : qty >= 6 ? 3 : qty >= 3 ? 2 : 1;
+      const total_xp = base_xp * qty * mult;
+      // Remove ALL of this junk type from inventory
+      p.inventory = p.inventory.filter(n => n !== name);
+      // Grant XP
+      if(p.gain_xp(total_xp)){
+        p.do_level_up();
+        FX.level_flash = 30;
+        this.perk_pool = getPerkChoices(p, p.perk_choices); this._levelup_cooldown = 45;
+        this.perk_cur = 0;
+        this.gs = GS_LEVELUP;
+        return;
+      }
+      burst(SW/2, SH/2-20, CYAN, 14);
+      this.show_msg(`+${total_xp} XP${mult>1?" ("+mult+"x bonus)":""}`);
     }
   }
 
@@ -2711,10 +3878,23 @@ class Game {
           drect(BOSS_C, px, py, TILE, TILE);
           drect(DRED, px+1, py+1, TILE-2, TILE-2, true);
           drect(YELLOW, px+3, py+3, 2, 2);
-          // pulsing menace
           const g = (Math.sin(performance.now()/120) * 0.5 + 0.5);
           ctx.fillStyle = `rgba(255,${(50*g)|0},${(50*g)|0},${g*0.3})`;
           ctx.fillRect(px, py, TILE, TILE);
+        } else if(t === T_SLOT){
+          // Slot machine tile — gold box, pulsing "7" in center
+          drect(PURPLE, px, py, TILE, TILE);
+          drect(GOLD, px+1, py+1, TILE-2, TILE-2, true);
+          const gp = (Math.sin(performance.now()/200) * 0.5 + 0.5);
+          ctx.fillStyle = `rgba(255,200,0,${0.5 + gp*0.5})`;
+          ctx.fillRect(px+3, py+3, 2, 2);
+        } else if(t === T_MERCHANT){
+          // Dungeon merchant — teal tile with pulsing M
+          drect(TEAL, px, py, TILE, TILE);
+          drect(WHITE, px+1, py+1, TILE-2, TILE-2, true);
+          const mp = (Math.sin(performance.now()/300) * 0.5 + 0.5);
+          ctx.fillStyle = `rgba(255,255,255,${0.5 + mp*0.5})`;
+          ctx.fillRect(px+3, py+3, 2, 2);
         }
       }
     }
@@ -2735,7 +3915,7 @@ class Game {
     // Player (Pass 2: facing direction + walk animation)
     const ppx = (p.x - this.cam_x)*TILE;
     const ppy = (p.y - this.cam_y)*TILE + HUD_H;
-    const pc = (p.status !== ST_NONE) ? (STATUS_COLORS[p.status] || BLUE) : BLUE;
+    const pc = (p.has_any_status()) ? (STATUS_COLORS[p.status] || BLUE) : BLUE;
     // shadow
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fillRect(ppx+1, ppy+TILE-2, TILE-2, 1);
@@ -2762,21 +3942,18 @@ class Game {
     apply_shake_transform();
     clear_screen(BLACK); draw_hud(this.p); this._draw_tiles();
     draw_particles();
-    draw_xpbar(this.p); this.draw_msg();
     end_shake_transform();
     draw_flash();
     draw_transition();
 
     const e = poll();
-    if(e.m){ this._attempt_recall(); return; }
-    if(e.b){ this._shop_return = GS_DUNGEON; this._shop_tab = 2; this._build_shop_menu(); this.gs = GS_SHOP; return; }
-    if(this.p.has_perk("paladin") && Math.random() < 0.12){
-      this.p.hp = Math.min(this.p.hp + this.p.perk_val("pala"), this.p.max_hp);
-    }
-    if(this.p.status === ST_FREEZE && this.p.status_turns > 0){
-      this.p.tick_status();
-      this.show_msg("Frozen still!");
-      return;
+    if(e.m){ this._open_home(GS_DUNGEON); return; }
+    if(e.b){ this._combat_inv_return = GS_DUNGEON; this.gs = GS_COMBAT_INV; return; }
+    if(this.p.has_perk("paladin")){
+      const pd = this.p.perk_tier_data("paladin");
+      if(pd && Math.random() < pd.chance && this.p.hp / this.p.max_hp < pd.cap){
+        this.p.hp = Math.min(this.p.hp + pd.heal, this.p.max_hp);
+      }
     }
     let dx=0, dy=0;
     if(e.u){ dy=-1; this.p.facing=0; }
@@ -2784,6 +3961,16 @@ class Game {
     else if(e.l){ dx=-1; this.p.facing=3; }
     else if(e.r){ dx=1; this.p.facing=1; }
     if(!dx && !dy) return;
+    // Freeze check — only ticks when movement is ATTEMPTED (not every frame)
+    if(this.p.has_status(ST_FREEZE) && this.p.statuses[ST_FREEZE] > 0){
+      // Only tick the freeze status, not everything (prevents poison from double-ticking on frozen moves)
+      const cursebane = this.p.has_perk("cursebane");
+      this.p.statuses[ST_FREEZE] = Math.max(0, this.p.statuses[ST_FREEZE] - (cursebane?2:1));
+      if(this.p.statuses[ST_FREEZE] <= 0) delete this.p.statuses[ST_FREEZE];
+      this.show_msg(`Frozen! (${this.p.statuses[ST_FREEZE]||0} left)`);
+      flash(FREEZE_C, 3);
+      return;
+    }
     const nx = this.p.x + dx, ny = this.p.y + dy;
     const t = this.d.tile_at(nx, ny);
     if(t === T_WALL) return;
@@ -2792,13 +3979,21 @@ class Game {
       this.combat_mon = mon; this.cphase = 0; this.combat_msg = "";
       this.is_boss_fight = false;
       this._refresh_combat_magic();
+      this._juggernaut_stacks = 0;
       this.gs = GS_COMBAT; return;
     }
     this.p.x = nx; this.p.y = ny; this.snap_cam();
     const dmg = this.p.tick_status();
     if(dmg > 0){
-      this.show_msg(`Poison -${dmg}!`);
-      flash(POISON_C, 3);
+      if(this.p.has_status(ST_POISON)){
+        this.show_msg(`Poison -${dmg}HP!`);
+        flash(POISON_C, 3);
+      }
+      if(this.p.has_status(ST_CURSE) && this.p.statuses[ST_CURSE] !== -1){
+        const ts = String(this.p.statuses[ST_CURSE]);
+        this.show_msg(`Curse -${dmg}HP (${ts})`);
+        flash(CURSE_C, 3);
+      }
     }
     if(this.p.hp <= 0){ this.gs = GS_GAMEOVER; return; }
     if(t === T_STAIR){
@@ -2806,6 +4001,13 @@ class Game {
       this.d = new DungeonMap(this.p.floor);
       this.p.x = this.d.start_x; this.p.y = this.d.start_y;
       this.snap_cam(); this.p.immune_used = false;
+      // Eternal perk: gain Max HP every floor
+      if(this.p.has_perk("eternal")){
+        const hp_gain = this.p.perk_val("etern");
+        this.p.max_hp += hp_gain;
+        this.p.hp = Math.min(this.p.hp + hp_gain, this.p.max_hp);
+        burst(this.p.x*8, this.p.y*8, CYAN, 6);
+      }
       this.show_msg(`Floor ${this.p.floor}!`);
       FX.transition = 30; FX.transition_text = `Floor ${this.p.floor}`;
     } else if(t === T_TOWN){
@@ -2816,14 +4018,25 @@ class Game {
       const key = `${nx},${ny}`;
       const item = this.d.chests[key];
       if(item){
+        // Check space needed: 1 normally, 2 with Treasure perk
+        const space_needed = this.p.has_perk("treasure") ? 2 : 1;
+        const space_avail = this.p.max_inv - this.p.inventory.length;
+        if(space_avail <= 0){
+          // Inventory full — warn but don't open chest so it stays for later
+          this.show_msg("Inventory full!");
+          return;
+        }
         delete this.d.chests[key];
         this.d.tiles[ny][nx] = T_FLOOR;
+        this.p.inventory.push(item);
         this.chest_item = item;
-        if(this.p.inventory.length < 20) this.p.inventory.push(item);
-        if(this.p.has_perk("treasure")){
+        if(this.p.has_perk("treasure") && space_avail >= 2){
           const b = randomLoot(this.p.floor);
-          if(this.p.inventory.length < 20) this.p.inventory.push(b);
+          this.p.inventory.push(b);
           this.chest_item = `${item} +${b.slice(0,8)}`;
+        } else if(this.p.has_perk("treasure") && space_avail < 2){
+          // Only room for one — still give it but note bonus was lost
+          this.chest_item = `${item} (inv full)`;
         }
         // Burst!
         burst((nx-this.cam_x)*TILE + 4, (ny-this.cam_y)*TILE + HUD_H + 4, GOLD, 18);
@@ -2832,6 +4045,10 @@ class Game {
     } else if(t === T_SHRINE){
       this.d.tiles[ny][nx] = T_FLOOR;
       this._trigger_shrine();
+    } else if(t === T_SLOT){
+      this._open_slot_machine(nx, ny);
+    } else if(t === T_MERCHANT){
+      this._open_dungeon_merchant(nx, ny);
     } else if(`${nx},${ny}` in this.d.traps){
       const trap = this.d.traps[`${nx},${ny}`];
       delete this.d.traps[`${nx},${ny}`];
@@ -2856,34 +4073,67 @@ class Game {
 
   _trigger_trap(trap){
     const p = this.p;
+    // Trap intensity scales with depth
+    const trap_scale = Math.max(1, 1 + Math.floor(p.floor / 15));
     if(trap === "spike"){
       const dmg = Math.max(1, 3 + ((p.floor/2)|0) - p.total_def());
-      p.hp = Math.max(1, p.hp - dmg);
+      p.hp -= dmg;  // can kill
       shake(4); flash(RED, 5);
       burst((p.x - this.cam_x)*TILE + 4, (p.y - this.cam_y)*TILE + HUD_H + 4, RED, 12);
       this.show_dialog(`Spikes burst forth!\n${dmg} damage taken!`, "TRAP!", RED, GS_DUNGEON);
+      if(p.hp <= 0){
+        if(p.has_perk("phoenix") && p.revive_remaining > 0){
+          const ph_td = p.perk_tier_data("phoenix");
+          p.revive_remaining--;
+          p.hp = Math.max(1, Math.floor(p.max_hp * (ph_td ? ph_td.hp_frac : 0.05)));
+          this.show_msg("PHOENIX revive!");
+          burst(SW/2, SH/2, GOLD, 24);
+        } else {
+          this.gs = GS_GAMEOVER;
+        }
+      }
     } else if(trap === "poison"){
-      if(p.apply_status(ST_POISON, 6)){
+      const turns = STATUS_TURNS[ST_POISON] * trap_scale;
+      if(p.apply_status(ST_POISON, turns)){
         flash(POISON_C, 4);
-        this.show_dialog("A foul miasma rises!\nThou art poisoned!", "TRAP!", POISON_C, GS_DUNGEON);
+        this.show_dialog(`A foul miasma rises!\nPoisoned ${turns} turns!`, "TRAP!", POISON_C, GS_DUNGEON);
       } else this.show_msg("Resist poison!");
     } else if(trap === "freeze"){
-      if(p.apply_status(ST_FREEZE, 3)){
+      const turns = STATUS_TURNS[ST_FREEZE] * trap_scale;
+      if(p.apply_status(ST_FREEZE, turns)){
         flash(FREEZE_C, 4);
-        this.show_dialog("Ice shatters beneath!\nThou art frozen!", "TRAP!", FREEZE_C, GS_DUNGEON);
+        this.show_dialog(`Ice shatters beneath!\nFrozen ${turns} moves!`, "TRAP!", FREEZE_C, GS_DUNGEON);
       } else this.show_msg("Resist freeze!");
     }
   }
 
+  _shrine_scale(){
+    const f = this.p.floor;
+    if(f <= 5)  return 1.0;
+    if(f <= 10) return 1.5;
+    if(f <= 20) return 2.0;
+    if(f <= 40) return 3.0;
+    return 4.0;
+  }
+
   _trigger_shrine(){
+    const sc = this._shrine_scale();
+    const f = this.p.floor;
+    const hp_amt  = (10 * sc)|0;
+    const atk_amt = (3  * sc)|0;
+    const gold_amt= (50 * sc)|0;
+    const xp_amt  = (30 * sc)|0;
+    const dmg_amt = (15 * sc)|0;
+    // Curse debuff scales: base -2 ATK/-2 DEF, +1 per 10 floors, cap at -8/-8
+    const curse_pen = Math.min(8, 2 + Math.floor(f / 10));
     const outcomes = [
-      ["Blessing of Valor","The shrine glows!\n+10 Max HP!","hp"],
-      ["Shrine of Might","Runes pulse red!\n+3 ATK gained!","atk"],
-      ["Warding Shrine","Holy light flows!\nStatus cleared!","cure"],
-      ["Shrine of Plenty","Coins rain down!\n+50 gold!","gold"],
-      ["Knowledge","Visions of battle!\n+30 XP gained!","xp"],
-      ["Cursed Altar","Dark runes flare!\n-2 ATK -2 DEF!","curse"],
-      ["Mimic!","A mimic strikes!\n-15 HP!","dmg"],
+      ["Blessing of Valor",`The shrine glows!\n+${hp_amt} Max HP!`,`hp:${hp_amt}`],
+      ["Shrine of Might",  `Runes pulse red!\n+${atk_amt} ATK!`,  `atk:${atk_amt}`],
+      ["Warding Shrine",   "Holy light flows!\nStatus cleared!",   "cure"],
+      ["Shrine of Plenty", `Coins rain down!\n+${gold_amt} gold!`,`gold:${gold_amt}`],
+      ["Knowledge",        `Visions of battle!\n+${xp_amt} XP!`,  `xp:${xp_amt}`],
+      ["Cursed Altar",     `Dark runes flare!\n-${curse_pen} ATK/DEF!`, `curse:${curse_pen}`],
+      ["Mimic!",           `A mimic strikes!\n-${dmg_amt} HP!`,   `dmg:${dmg_amt}`],
     ];
     const s = outcomes[Math.floor(Math.random()*outcomes.length)];
     this._shrine_effect = s[2];
@@ -2893,17 +4143,40 @@ class Game {
 
   _apply_shrine_effect(eff){
     const p = this.p;
-    if(eff === "hp"){ p.max_hp += 10; p.hp = Math.min(p.hp+10, p.max_hp); }
-    else if(eff === "atk"){ p.atk += 3; }
-    else if(eff === "cure"){ p.status = ST_NONE; p.status_turns = 0; p.blinded = false; }
-    else if(eff === "gold"){ p.gold += 50; }
-    else if(eff === "curse"){ p.atk_mod -= 2; p.def_mod -= 2; p.apply_status(ST_CURSE, 8); }
-    else if(eff === "dmg"){ p.hp = Math.max(1, p.hp-15); shake(5); flash(RED, 4); }
-    else if(eff === "xp"){
-      if(p.gain_xp(30)){
+    if(eff.startsWith("hp:")){
+      const n = parseInt(eff.split(":")[1]);
+      p.max_hp += n; p.hp = Math.min(p.hp + n, p.max_hp);
+    } else if(eff.startsWith("atk:")){
+      p.atk += parseInt(eff.split(":")[1]);
+    } else if(eff === "cure"){
+      p.clear_status();
+    } else if(eff.startsWith("gold:")){
+      p.gold += parseInt(eff.split(":")[1]);
+    } else if(eff.startsWith("curse:")){
+      // Shrine curse — permanent, scaled penalty
+      const pen = parseInt(eff.split(":")[1]) || 4;
+      if(!p.resist_status()){
+        if(p.has_status(ST_CURSE)){
+          if(p.statuses[ST_CURSE] !== -1){
+            p.statuses[ST_CURSE] = -1;
+            p.atk_mod -= pen; p.def_mod -= pen;
+            p._curse_penalty = (p._curse_penalty||0) + pen;
+          }
+        } else {
+          p.statuses[ST_CURSE] = -1;
+          p.atk_mod -= pen; p.def_mod -= pen;
+          p._curse_penalty = pen;
+        }
+      }
+    } else if(eff.startsWith("dmg:")){
+      const dmg = parseInt(eff.split(":")[1]);
+      p.hp -= dmg; shake(5); flash(RED, 4);  // can kill
+    } else if(eff.startsWith("xp:")){
+      const xp = parseInt(eff.split(":")[1]);
+      if(p.gain_xp(xp)){
         p.do_level_up();
         FX.level_flash = 30;
-        this.perk_pool = getPerkChoices(p, p.perk_choices);
+        this.perk_pool = getPerkChoices(p, p.perk_choices); this._levelup_cooldown = 45;
         this.perk_cur = 0;
         this.gs = GS_LEVELUP;
       }
@@ -2959,7 +4232,7 @@ class Game {
     hbar(2, SH-27, 50, 5, hpf, hpc);
     dtext(`${p.hp}/${p.max_hp}`, 54, SH-27, hpc);
     dtext(`ATK:${p.total_atk()} DEF:${p.total_def()}`, 2, SH-20, GRAY);
-    if(p.status !== ST_NONE){
+    if(p.has_any_status()){
       dtext(STATUS_NAMES[p.status] || "?", 90, SH-20, STATUS_COLORS[p.status] || WHITE);
     }
     if(this.cphase === 0) dtext("A:Fight M:Magic B:Inv", 2, SH-10, WHITE);
@@ -2975,6 +4248,14 @@ class Game {
       if(e.a || e.b){
         if(b[2] <= 0){
           this.is_boss_fight = false;
+          this.d.boss_cleared = true;
+          // Spawn the staircase now that boss is defeated
+          if(this.d.is_boss_floor){
+            this.d.tiles[this.d.stair_y][this.d.stair_x] = T_STAIR;
+            burst((this.d.stair_x - this.cam_x)*TILE + 4, (this.d.stair_y - this.cam_y)*TILE + HUD_H + 4, GOLD, 20);
+            this.show_msg("The way down opens!");
+          }
+          // Convert boss door back to floor
           if(this.d.boss_door){
             const [bx,by] = this.d.boss_door;
             this.d.tiles[by][bx] = T_FLOOR;
@@ -2987,15 +4268,15 @@ class Game {
       }
       return;
     }
-    if(e.b){ this._shop_return = GS_BOSS_COMBAT; this._shop_tab = 2; this._build_shop_menu(); this.gs = GS_SHOP; return; }
+    if(e.b){ this._combat_inv_return = GS_BOSS_COMBAT; this.gs = GS_COMBAT_INV; return; }
     if(e.a) this._do_boss_round();
   }
 
   _do_boss_round(){
     const b = this.boss_data, p = this.p;
-    let atk = p.total_atk() + this._scroll_dmg; this._scroll_dmg = 0;
-    if(p.has_perk("berserker") && p.hp/p.max_hp < 0.3) atk += p.perk_val("brsk");
-    const is_crit = p.roll_crit();
+    let atk = p.total_atk() + this._scroll_dmg + p.unique_bonus(b[0]) + this._juggernaut_stacks * (p.has_perk("juggernaut") ? p.perk_val("jugg") : 0); this._scroll_dmg = 0;
+    const bd=p.perk_tier_data("berserker"); if(bd && p.hp/p.max_hp < bd.threshold) atk += bd.val;
+    const is_crit = p.roll_crit_combat(this);
     let pdmg = Math.max(1, atk - b[4] + Math.floor(Math.random()*4) - 1);
     if(is_crit) pdmg = Math.max(2, pdmg * 2);
     b[2] -= pdmg;
@@ -3037,12 +4318,31 @@ class Game {
     if(b[2] <= 0){
       p.gold += b[6];
       if(p.has_perk("scavenger")) p.gold += b[6];
-      if(p.inventory.length < 20) p.inventory.push(b[8]);
+      // Boss drops two items — push each if inventory has space
+      const cycle = Math.floor((p.floor - 1) / 25);
+      let loot = Array.isArray(b[8]) ? [...b[8]] : [b[8]];
+      // Cycle 2+ (floor 50+): replace weapon drop with legendary
+      if(cycle >= 2){
+        const LEGENDARY_WEAPONS = ["Mythril Blade","Abyssal Edge"];
+        const LEGENDARY_ARMORS  = ["Titan Plate","Void Eternal"];
+        loot = [
+          LEGENDARY_WEAPONS[cycle % LEGENDARY_WEAPONS.length],
+          LEGENDARY_ARMORS[cycle  % LEGENDARY_ARMORS.length],
+        ];
+      } else if(cycle === 1){
+        // Cycle 1 (floor 25-49): keep normal loot but add a Soul Crystal bonus
+        loot = [...loot, "Soul Crystal"];
+      }
+      for(const item of loot){
+        if(p.inventory.length < p.max_inv) p.inventory.push(item);
+      }
+      // Bestiary tracking
+      this.bestiary[b[0]] = (this.bestiary[b[0]] || 0) + 1;
       const leveled = p.gain_xp(b[5]);
       if(leveled){
         p.do_level_up();
         FX.level_flash = 30;
-        this.perk_pool = getPerkChoices(p, p.perk_choices);
+        this.perk_pool = getPerkChoices(p, p.perk_choices); this._levelup_cooldown = 45;
         this.perk_cur = 0;
         this._pending_levelup = true;
       }
@@ -3075,15 +4375,15 @@ class Game {
       const st = [ST_POISON, ST_FREEZE, ST_BLIND][Math.floor(Math.random()*3)];
       // Major shield grants status immunity while active (turn already ticked, was active this strike)
       if(!shield_blocked || !this._shield_immune){
-        if(p.apply_status(st, 4)) st_str = "+" + (STATUS_NAMES[st] || "?");
+        if(p.apply_status(st, STATUS_TURNS[st]||4)) st_str = "+" + (STATUS_NAMES[st] || "?");
       }
     }
     const block_tag = shield_blocked ? "BLK" : `${raw}`;
     this.combat_msg = `You:${dmg_label} B:${block_tag}${st_str}`;
     this.cphase = 1;
     if(p.hp <= 0){
-      if(p.has_perk("phoenix") && !p.revive_used){
-        p.hp = 5; p.revive_used = true;
+      const ph_td=p.perk_tier_data("phoenix"); if(ph_td && p.revive_remaining>0){
+        p.revive_remaining--; p.hp=Math.max(5,Math.floor(p.max_hp*ph_td.hp_frac));
         this.show_msg("PHOENIX revive!");
         burst(SW/2, SH/2, GOLD, 24);
         this.cphase = 0;
@@ -3156,7 +4456,7 @@ class Game {
       return;
     }
     if(e.m){ this._open_scroll_picker(); return; }
-    if(e.b){ this._shop_return = GS_COMBAT; this._shop_tab = 2; this._build_shop_menu(); this.gs = GS_SHOP; return; }
+    if(e.b){ this._combat_inv_return = GS_COMBAT; this.gs = GS_COMBAT_INV; return; }
     if(e.a) this._do_combat_round();
   }
 
@@ -3196,9 +4496,9 @@ class Game {
 
   _do_combat_round(){
     const m = this.combat_mon, p = this.p;
-    let atk = p.total_atk() + this._scroll_dmg; this._scroll_dmg = 0;
-    if(p.has_perk("berserker") && p.hp/p.max_hp < 0.3) atk += p.perk_val("brsk");
-    const is_crit = p.roll_crit();
+    let atk = p.total_atk() + this._scroll_dmg + p.unique_bonus(m[0]) + this._juggernaut_stacks * (p.has_perk("juggernaut") ? p.perk_val("jugg") : 0); this._scroll_dmg = 0;
+    const bd=p.perk_tier_data("berserker"); if(bd && p.hp/p.max_hp < bd.threshold) atk += bd.val;
+    const is_crit = p.roll_crit_combat(this);
     let pdmg = Math.max(1, atk - m[4] + Math.floor(Math.random()*4) - 1);
     if(is_crit) pdmg = Math.max(2, pdmg * 2);
     m[2] -= pdmg;
@@ -3253,7 +4553,7 @@ class Game {
       if(m[11] > 0 && Math.floor(Math.random()*100)+1 <= m[11]){
         // Status applies unless major shield's status immunity kicked in this turn
         const status_blocked = shield_blocked && this._shield_immune;
-        if(!status_blocked && p.apply_status(m[12], 4)){
+        if(!status_blocked && p.apply_status(m[12], STATUS_TURNS[m[12]]||4)){
           const sn = STATUS_NAMES[m[12]] || "?";
           const dmg_tag = shield_blocked ? "BLK" : `${mdmg}`;
           this.combat_msg = `You:${dmg_label} F:${dmg_tag}+${sn}`;
@@ -3263,6 +4563,13 @@ class Game {
     }
     if(!alive){
       m[10] = false;
+      // Bestiary tracking
+      this.bestiary[m[0]] = (this.bestiary[m[0]] || 0) + 1;
+      // Juggernaut: gain stacks on kill (capped by tier)
+      if(this.p.has_perk("juggernaut")){
+        const max_stacks = this.p.perk_ranks["juggernaut"] >= 1 ? 15 : 10;
+        this._juggernaut_stacks = Math.min(this._juggernaut_stacks + 1, max_stacks);
+      }
       let gold = m[6];
       if(p.has_perk("scavenger")) gold *= p.perk_val("gold_m");
       if(p.weapon){
@@ -3271,11 +4578,16 @@ class Game {
           if(e[3] === "life") p.hp = Math.min(p.hp + e[4], p.max_hp);
         }
       }
+      if(p.weapon === "Soulrender"){
+        // Soulrender: drain 25% of max player HP as lifesteal per kill
+        const drain = Math.max(3, (p.max_hp * 0.25) | 0);
+        p.hp = Math.min(p.hp + drain, p.max_hp);
+      }
       if(p.has_perk("bloodthirst")) p.hp = Math.min(p.hp + p.perk_val("blood"), p.max_hp);
       p.gold += gold;
       if(Math.random() < 0.45){
         const item = randomLoot(p.floor);
-        if(p.inventory.length < 20) p.inventory.push(item);
+        if(p.inventory.length < p.max_inv) p.inventory.push(item);
       }
       const leveled = p.gain_xp(m[5]);
       this.combat_msg = `Win! +${m[5]}XP +${gold}G`;
@@ -3284,7 +4596,7 @@ class Game {
       if(leveled){
         p.do_level_up();
         FX.level_flash = 30;
-        this.perk_pool = getPerkChoices(p, p.perk_choices);
+        this.perk_pool = getPerkChoices(p, p.perk_choices); this._levelup_cooldown = 45;
         this.perk_cur = 0;
         this.gs = GS_LEVELUP;
       }
@@ -3294,8 +4606,8 @@ class Game {
     this.combat_msg = `You:${dmg_label} Foe:${final_foe_tag}`;
     this.cphase = 1;
     if(p.hp <= 0){
-      if(p.has_perk("phoenix") && !p.revive_used){
-        p.hp = 5; p.revive_used = true;
+      const ph_td=p.perk_tier_data("phoenix"); if(ph_td && p.revive_remaining>0){
+        p.revive_remaining--; p.hp=Math.max(5,Math.floor(p.max_hp*ph_td.hp_frac));
         this.show_msg("PHOENIX revive!");
         burst(SW/2, SH/2, GOLD, 24);
         this.cphase = 0;
@@ -3321,40 +4633,118 @@ class Game {
   }
 
   tick_levelup(){
-    clear_screen(BLACK);
-    // background sparkle
-    if(Math.random() < 0.3){
-      burst(Math.random()*SW, Math.random()*SH, GOLD, 1);
-    }
+    clear_screen(rgb(15,10,25));
+    if(Math.random() < 0.25) burst(Math.random()*SW, Math.random()*SH, GOLD, 1);
     draw_particles();
-    drect(PURPLE, 8, 6, 112, 116);
-    drect(GOLD, 8, 6, 112, 116, true);
     const p = this.p;
-    dtext("LEVEL UP!", 34, 12, GOLD);
-    dtext(`Level ${p.level}`, 36, 22, YELLOW);
-    dtext(`HP:${p.max_hp} ATK:${p.total_atk()}`, 12, 32, GREEN);
-    dtext("Choose Perk:", 22, 43, WHITE);
+
+    // Header strip — compact to give cards more room
+    drect(PURPLE, 0, 0, SW, 20);
+    drect(GOLD, 0, 0, SW, 20, true);
+    dtext("★ LEVEL UP ★", 30, 2, GOLD);
+    dtext(`Lv${p.level} HP:${p.max_hp} ATK:${p.total_atk()} DEF:${p.total_def()}`, 4, 11, GREEN);
+
+    // Perk cards — 4 max, 21px each, 1px gap, starting y=21 → ends y=106
+    const CARD_H = 21;
+    const CARD_X = 4, CARD_W = SW - 8;
     for(let i=0; i<this.perk_pool.length; i++){
-      const pk = this.perk_pool[i];
-      const py = 55 + i*20;
+      const choice = this.perk_pool[i];
+      const pk = choice.pk;
+      const rank = choice.rank;
+      const tiers = PERK_TIERS[pk[0]];
+      const cy = 21 + i * (CARD_H + 1);
       const sel = (i === this.perk_cur);
-      drect(sel ? DBLUE : DGRAY, 12, py-1, 104, 18);
-      drect(pk[6], 12, py-1, 104, 18, true);
-      dtext(pk[1].slice(0,16), 14, py, WHITE);
-      dtext(pk[2].slice(0,18), 14, py+9, GRAY);
+
+      // Card background
+      drect(sel ? rgb(30,40,80) : rgb(25,20,35), CARD_X, cy, CARD_W, CARD_H);
+      // Left color stripe = perk's color
+      drect(pk[6], CARD_X, cy, 3, CARD_H);
+      // Border
+      if(sel){
+        drect(GOLD, CARD_X, cy, CARD_W, CARD_H, true);
+      } else {
+        drect(rgb(70,55,90), CARD_X, cy, CARD_W, CARD_H, true);
+      }
+
+      // Perk name in perk's own color
+      const roman = ["I","II","III"][rank] || "";
+      let display_name = tiers ? `${pk[1]} ${roman}` : pk[1];
+      if(choice.is_upgrade) display_name = `↑ ${display_name}`;
+      const name_col = choice.is_upgrade ? CYAN : pk[6];
+      dtext(display_name.slice(0,15), CARD_X+6, cy+2, name_col);
+
+      // Description — white on dark strip for maximum contrast
+      const desc = tiers ? tiers[rank].desc : pk[2];
+      drect(rgb(15,10,25), CARD_X+4, cy+11, CARD_W-8, 8);
+      dtext(desc.slice(0,20), CARD_X+6, cy+12, WHITE);
     }
-    dtext("U/D:Pick A:Take", 16, SH-12, GRAY);
+
+    // Cooldown bar — sits at y=108, well clear of cards
+    const COOLDOWN_MAX = 45;
+    if(this._levelup_cooldown > 0) this._levelup_cooldown--;
+    const cd_frac = 1 - this._levelup_cooldown / COOLDOWN_MAX;
+    const cd_done = this._levelup_cooldown <= 0;
+    const bar_y = 109;
+    drect(rgb(20,15,30), CARD_X, bar_y, CARD_W, 9);
+    if(!cd_done){
+      drect(PURPLE, CARD_X, bar_y, (CARD_W*cd_frac)|0, 9);
+      drect(rgb(100,70,140), CARD_X, bar_y, CARD_W, 9, true);
+      dtext("Reading...", 40, bar_y+1, rgb(160,120,200));
+    } else {
+      drect(rgb(120,90,20), CARD_X, bar_y, CARD_W, 9);
+      drect(GOLD, CARD_X, bar_y, CARD_W, 9, true);
+      dtext("U/D select  A: Take", 14, bar_y+1, rgb(20,15,5));
+    }
     const e = poll();
     if(e.u) this.perk_cur = Math.max(0, this.perk_cur-1);
     else if(e.d) this.perk_cur = Math.min(this.perk_pool.length-1, this.perk_cur+1);
-    else if(e.a && this.perk_pool.length){
-      const pk = this.perk_pool[this.perk_cur];
-      p.perks.push(pk);
-      if(pk[3] === "maxhp"){
-        p.max_hp += pk[4];
-        p.hp = Math.min(p.hp + pk[4], p.max_hp);
+    else if(e.a && cd_done && this.perk_pool.length){
+      const choice = this.perk_pool[this.perk_cur];
+      const pk = choice.pk;
+      const rank = choice.rank;
+      const tiers = PERK_TIERS[pk[0]];
+      if(choice.is_upgrade){
+        // Upgrade: update rank only, don't push perk again
+        const old_rank = p.perk_ranks[pk[0]] || 0;
+        p.perk_ranks[pk[0]] = rank;
+        // Vitality upgrade: add the HP difference
+        if(pk[3] === "maxhp" && tiers){
+          const diff = tiers[rank].val - tiers[old_rank].val;
+          p.max_hp += diff;
+          p.hp = Math.min(p.hp + diff, p.max_hp);
+        }
+        // Phoenix upgrade: reset revive count to new total
+        if(pk[0] === "phoenix" && tiers){
+          p.revive_remaining = tiers[rank].count;
+        }
+        // Pack Rat upgrade: add the slot difference
+        if(pk[0] === "pack_rat" && tiers){
+          const diff = tiers[rank].val - tiers[old_rank].val;
+          p.max_inv += diff;
+        }
+      } else {
+        // New perk
+        p.perks.push(pk);
+        p.perk_ranks[pk[0]] = 0;
+        // Vitality: apply initial HP
+        if(pk[3] === "maxhp"){
+          const val = tiers ? tiers[0].val : pk[4];
+          p.max_hp += val;
+          p.hp = Math.min(p.hp + val, p.max_hp);
+        }
+        // Pack Rat: expand inventory by tier value
+        if(pk[0] === "pack_rat"){
+          const pr_val = tiers ? tiers[0].val : 2;
+          p.max_inv += pr_val;
+        }
+        // Phoenix: set initial revive count
+        if(pk[0] === "phoenix" && tiers){
+          p.revive_remaining = tiers[0].count;
+        }
       }
-      this.show_msg(`Perk: ${pk[1].slice(0,12)}`);
+      const roman = ["I","II","III"][rank] || "";
+      const label = tiers ? `${pk[1]} ${roman}` : pk[1];
+      this.show_msg(`${choice.is_upgrade?"↑":""}${label.slice(0,14)}`);
       burst(SW/2, SH/2, pk[6], 24);
       this.gs = GS_DUNGEON;
     }
@@ -3379,8 +4769,10 @@ class Game {
     const e = poll();
     if(e.a || e.b){
       const banked = this.p.banked;
+      const bestiary = this.bestiary;  // persist across runs
       this.p.reset();
       this.p.gold += banked;
+      this.bestiary = bestiary;
       this.gs = GS_TITLE;
     }
   }
@@ -3403,6 +4795,11 @@ class Game {
     else if(g === GS_DIALOG) this.tick_dialog();
     else if(g === GS_HOME) this.tick_home();
     else if(g === GS_SCROLL_PICKER) this.tick_scroll_picker();
+    else if(g === GS_QTY_PROMPT) this.tick_qty_prompt();
+    else if(g === GS_SLOT) this.tick_slot();
+    else if(g === GS_COMBAT_INV) this.tick_combat_inv();
+    else if(g === GS_LIBRARY) this.tick_library();
+    else if(g === GS_MERCHANT) this.tick_merchant();
   }
 }
 
